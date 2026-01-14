@@ -7,7 +7,7 @@ authors = [
 ]
 description = "Open source interface between a Viessmann device (heat pump, gas heater, etc) and MQTT"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
