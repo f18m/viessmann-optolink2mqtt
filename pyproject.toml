@@ -1,0 +1,51 @@
+[project]
+name = "viessmann-optolink2mqtt"
+authors = [
+  { name="Francesco Montorsi", email="francesco.montorsi.nospam@gmail.com" },
+  # author of original https://github.com/philippoo66/optolink-splitter project
+  { name="Phil" },
+]
+description = "Open source interface between a Viessmann device (heat pump, gas heater, etc) and MQTT"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dynamic = ["dependencies", "version"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[project.urls]
+"Homepage" = "https://github.com/f18m/viessmann-optolink2mqtt"
+"Bug Tracker" = "https://github.com/f18m/viessmann-optolink2mqtt/issues"
+
+[project.scripts]
+optolink2mqtt = "optolink2mqtt:main.main"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs", "hatch-requirements-txt"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata.hooks.requirements_txt]
+files = ["requirements.txt"]
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/_optolink2mqtt_version.py"
+template = '''
+version = "{version}"
+'''
+
+# disable guessing of next version, 
+# see https://setuptools-scm.readthedocs.io/en/latest/extending/#setuptools_scmversion_scheme
+[tool.hatch.version.raw-options]
+version_scheme = "no-guess-dev"
