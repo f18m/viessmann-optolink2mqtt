@@ -60,9 +60,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest
-      - name: Run tests
-        run: |
-          pytest -vvv --log-level=INFO -m unit
+      # disabled till I write unit tests
+      # - name: Run tests
+      #   run: |
+      #     pytest -vvv --log-level=INFO -m unit
       
   # integration_tests:
   #   runs-on: ubuntu-latest

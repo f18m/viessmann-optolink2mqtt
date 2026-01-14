@@ -4,8 +4,11 @@
 
 FROM public.ecr.aws/docker/library/python:3.13-alpine AS builder
 
+# NOTE: git is required to get the "hatch-vcs" plugin to work and produce the _optolink2mqtt_version.py file
+RUN apk add build-base linux-headers git
+
 WORKDIR /build
-COPY requirements.txt pyproject.toml README.rst ./
+COPY requirements.txt pyproject.toml README.md ./
 COPY ./src ./src/
 COPY ./.git ./.git/
 

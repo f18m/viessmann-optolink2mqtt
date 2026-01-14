@@ -75,6 +75,9 @@ docker-run-mosquitto:
 
 # to cross-build docker images for other platforms (e.g. ARM), the buildx image builder backend is required:
 
+docker-native:
+	docker build --platform linux/amd64 --tag optolink2mqtt:latest --build-arg USERNAME=root .
+
 docker-armv6:
 	docker buildx build --platform linux/arm/v6 --tag optolink2mqtt:latest --build-arg USERNAME=root .
 
