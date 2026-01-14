@@ -1,8 +1,10 @@
-#import ./src/optolink2mqtt/optolinkvs2 as vs2
+#!/usr/bin/env python
+ 
+#import ./src/optolink2mqtt/optolink2mqtt as vs2
 import sys
 import time
 import serial
-import optolinkvs2
+import optolink2mqtt # assumes you have the wheel installed
 
 # --------------------
 # main for test only
@@ -12,7 +14,7 @@ if(len(sys.argv) > 1):
     port = sys.argv[1]
 
 ser = serial.Serial(port, baudrate=4800, bytesize=8, parity='E', stopbits=2, timeout=0) 
-proto = optolinkvs2.OptolinkVS2Protocol(ser)
+proto = optolink2mqtt.optolink2mqttProtocol(ser)
 
 try:
     if not ser.is_open:
@@ -24,14 +26,14 @@ try:
     if(True):
         while(True):
             buff = proto.read_datapoint(0x00f8, 8)
-            print("0x00f8", optolinkvs2.OptolinkVS2Protocol.bbbstr(buff))
+            print("0x00f8", optolink2mqtt.optolink2mqttProtocol.bbbstr(buff))
             time.sleep(0.1)
 
     # write test
     if(False):
         buff = proto.read_datapoint(0x27d4, 1)
         currval = buff
-        print("Niveau Ist", optolinkvs2.OptolinkVS2Protocol.bbbstr(buff), optolinkvs2.OptolinkVS2Protocol.bytesval(buff))
+        print("Niveau Ist", optolink2mqtt.optolink2mqttProtocol.bbbstr(buff), optolink2mqtt.optolink2mqttProtocol.bytesval(buff))
         
         time.sleep(1)
 
@@ -42,7 +44,7 @@ try:
         time.sleep(2)
 
         buff = proto.read_datapoint(0x27d4, 1)
-        print("Niveau neu", optolinkvs2.OptolinkVS2Protocol.bbbstr(buff), optolinkvs2.OptolinkVS2Protocol.bytesval(buff))
+        print("Niveau neu", optolink2mqtt.optolink2mqttProtocol.bbbstr(buff), optolink2mqtt.optolink2mqttProtocol.bytesval(buff))
 
         time.sleep(1)
 
