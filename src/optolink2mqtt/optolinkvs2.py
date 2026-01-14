@@ -76,7 +76,7 @@ class OptolinkVS2Protocol:
             if buff and buff[0] == 0x05:  # ENQ
                 break
         else:
-            logging.error("init_vs2: Timeout waiting for 0x05")
+            logging.error("VS2: Timeout waiting for 0x05")
             return False
 
         self.ser.reset_input_buffer()
@@ -93,7 +93,7 @@ class OptolinkVS2Protocol:
             if buff and buff[0] == 0x06:  # ACK
                 return True
 
-        logging.error("init_vs2: Timeout waiting for 0x06")
+        logging.error("VS2: Timeout waiting for 0x06")
         return False
 
     # ------------------------------------------------------------------
@@ -243,7 +243,7 @@ class OptolinkVS2Protocol:
             if state == 0:
                 if resptelegr and inbuff:
                     if self.show_opto_rx:
-                        print("rx", format(inbuff[0], "02x"))
+                        print(f"rx: {inbuff[0]:02x}")
                     if inbuff[0] == 0x06:
                         state = 1
                     elif inbuff[0] == 0x15:  # VS2_NACK
@@ -252,7 +252,7 @@ class OptolinkVS2Protocol:
                             0x15, addr, alldata, msgid, msqn, fctcd, dlen, raw
                         )
                     else:
-                        logging.error("VS2 unknown first byte Error")
+                        logging.error("VS2 unknown first byte error")
                         return self._return(
                             0x20, addr, alldata, msgid, msqn, fctcd, dlen, raw
                         )
@@ -264,7 +264,7 @@ class OptolinkVS2Protocol:
             # From this point on, the master request and slave response have an identical structure (apart from error messages and such).
             if state == 1 and inbuff:
                 if inbuff[0] != 0x41:  # STX
-                    logging.error("VS2 STX Error", format(inbuff[0], "02x"))
+                    logging.error(f"VS2 STX Error: {inbuff[0]:02x}")
                     # It might be necessary to wait for any remaining part of the telegram.
                     return self._return(
                         0x41, addr, alldata, msgid, msqn, fctcd, dlen, raw
@@ -274,7 +274,7 @@ class OptolinkVS2Protocol:
             if state == 2 and len(inbuff) > 1:
                 pllen = inbuff[1]
                 if pllen < 5:  # protocol_Id + MsgId|FnctCode + AddrHi + AddrLo + BlkLen
-                    logging.error("VS2 Len Error", pllen)
+                    logging.error(f"VS2 Len Error: {pllen}")
                     return self._return(
                         0xFD, addr, alldata, msgid, msqn, fctcd, dlen, raw
                     )
