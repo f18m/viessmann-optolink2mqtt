@@ -4,7 +4,6 @@ optolinkvs2.py
 Optolink VS2 / 300 Protocol handler
 Reworked by Francesco Montorsi based on the original code by philippoo66
 
-TODO: remove all print() operations and replace with proper logging
 TODO: remove mqtt_publ_callback to move MQTT logic out of this class
 
 ----------------
@@ -72,7 +71,7 @@ class OptolinkVS2Protocol:
             time.sleep(0.1)
             buff = self.ser.read(1)
             if self.show_opto_rx:
-                print(buff)
+                logging.debug(buff)
             if buff and buff[0] == 0x05:  # ENQ
                 break
         else:
@@ -89,8 +88,9 @@ class OptolinkVS2Protocol:
             time.sleep(0.1)
             buff = self.ser.read(1)
             if self.show_opto_rx:
-                print(buff)
+                logging.debug(buff)
             if buff and buff[0] == 0x06:  # ACK
+                logging.info("VS2 Protocol initialized successfully")
                 return True
 
         logging.error("VS2: Timeout waiting for 0x06")
@@ -164,7 +164,7 @@ class OptolinkVS2Protocol:
         outbuff[7 : 7 + len(data)] = data
         outbuff[-1] = self.calc_crc(outbuff)
 
-        print(OptolinkVS2Protocol.bbbstr(outbuff))
+        logging.debug(OptolinkVS2Protocol.readable_hex(outbuff))
 
         self.ser.reset_input_buffer()
         self.ser.write(outbuff)
@@ -241,11 +241,16 @@ class OptolinkVS2Protocol:
                 return 0xAA, 0, retdata
 
             if state == 0:
-                if resptelegr and inbuff:
+                if not resptelegr:
+                    state = 1
+                elif len(inbuff) > 0:
                     if self.show_opto_rx:
-                        print(f"rx: {inbuff[0]:02x}")
-                    if inbuff[0] == 0x06:
+                        logging.debug(f"VS2 received: {inbuff.hex()}")
+
+                    if inbuff[0] == 0x06:  # VS2_ACK
                         state = 1
+                        # keep going...
+
                     elif inbuff[0] == 0x15:  # VS2_NACK
                         logging.error("VS2 NACK Error")
                         return self._return(
@@ -256,15 +261,18 @@ class OptolinkVS2Protocol:
                         return self._return(
                             0x20, addr, alldata, msgid, msqn, fctcd, dlen, raw
                         )
+
                     # Separate the first byte
                     inbuff = inbuff[1:]
-                else:
-                    state = 1
 
-            # From this point on, the master request and slave response have an identical structure (apart from error messages and such).
-            if state == 1 and inbuff:
+            # From this point on, the master request and slave response have an identical structure
+            # (apart from error messages and such)
+            if state == 1 and len(inbuff) > 0:
+                if self.show_opto_rx:
+                    logging.debug(f"VS2 received: {inbuff.hex()}")
+
                 if inbuff[0] != 0x41:  # STX
-                    logging.error(f"VS2 STX Error: {inbuff[0]:02x}")
+                    logging.error(f"VS2 STX Error: {inbuff.hex()}")
                     # It might be necessary to wait for any remaining part of the telegram.
                     return self._return(
                         0x41, addr, alldata, msgid, msqn, fctcd, dlen, raw
@@ -279,6 +287,10 @@ class OptolinkVS2Protocol:
                         0xFD, addr, alldata, msgid, msqn, fctcd, dlen, raw
                     )
                 if len(inbuff) >= pllen + 3:  # STX + Len + Payload + CRC
+
+                    if self.show_opto_rx:
+                        logging.debug(f"VS2 received: {inbuff.hex()}")
+
                     # receive complete
                     inbuff = inbuff[: pllen + 4]  # make sure no tailing trash
                     msgid = inbuff[2]
@@ -349,8 +361,9 @@ class OptolinkVS2Protocol:
         return code, addr, data if not raw else bytearray(data)
 
     @staticmethod
-    def bbbstr(data):
-        try:
-            return " ".join([format(byte, "02x") for byte in data])
-        except:
-            return data
+    def readable_hex(data: bytes) -> str:
+        # try:
+        #     return " ".join([format(byte, "02x") for byte in data])
+        # except:
+        #     return data
+        return data.hex(sep=" ")
