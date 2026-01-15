@@ -10,7 +10,7 @@ import logging
 THIS_SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 SRC_DIR = os.path.realpath(THIS_SCRIPT_DIR + "/../src")
 sys.path.append(SRC_DIR)
-from optolink2mqtt.optolinkvs2 import OptolinkVS2Protocol  # noqa: E402
+from optolink2mqtt.optolinkvs2_protocol import OptolinkVS2Protocol  # noqa: E402
 
 # --------------------
 # main for test only

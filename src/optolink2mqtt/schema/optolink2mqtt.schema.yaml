@@ -37,7 +37,7 @@ mqtt_broker:
 ---
 poll_item_def: 
   name: str()
-  sampling_period: str()
+  sampling_period_seconds: int(min=1)
   register: int()
   length: int()
   signed: bool()
