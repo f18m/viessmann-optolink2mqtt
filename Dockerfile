@@ -36,7 +36,7 @@ COPY --from=builder /build/deps ./deps/
 COPY src/optolink2mqtt/*.py ./src/
 
 # copy the version file produced by hatch-vcs plugin from the builder stage:
-COPY --from=builder /build/src/_optolink2mqtt_version.py ./src/
+COPY --from=builder /build/src/optolink2mqtt/_optolink2mqtt_version.py ./src/optolink2mqtt/
 
 RUN mkdir ./conf ./schema
 #COPY src/optolink2mqtt/schema/* ./schema/
