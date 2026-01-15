@@ -26,6 +26,13 @@ inspect-wheel:
 	# see https://github.com/wheelodex/wheel-inspect
 	wheel2json dist/optolink2mqtt-*-py3-none-any.whl
 
+run-from-local-git-clone:
+	# this is useful if you are running on e.g. your Raspberry PI / any other Single Board Computer (SBC)
+	# connected to the Viessmann device and you want to test some changes to a local "git cloned"
+	# optolink2mqtt source tree:
+	python -m src.optolink2mqtt.main 
+
+
 test: unit-test integration-test
 
 unit-test:

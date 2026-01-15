@@ -40,7 +40,7 @@ sources = ["src"]
 source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "src/_optolink2mqtt_version.py"
+version-file = "src/optolink2mqtt/_optolink2mqtt_version.py"
 template = '''
 version = "{version}"
 '''
