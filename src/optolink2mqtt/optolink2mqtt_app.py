@@ -16,7 +16,7 @@ import argparse
 import os
 
 # import sched
-# import socket
+import socket
 import logging
 import sys
 
@@ -24,8 +24,7 @@ import sys
 import time
 
 from .config import Config
-
-# from .mqtt_client import MqttClient
+from .mqtt_client import MqttClient
 
 
 class Optolink2MqttApp:
@@ -236,21 +235,21 @@ class Optolink2MqttApp:
             f"Optolink2MqttApp version {Optolink2MqttApp.get_embedded_version()} starting up"
         )
 
-        # #
-        # # create MqttClient
-        # #
-        # ha_status_topic = ""
-        # if self.config.config["mqtt"]["ha_discovery"]["enabled"]:
-        #     ha_status_topic = self.config.config["mqtt"]["ha_discovery"]["topic"] + "/status"
-        # self.mqtt_client = MqttClient(
-        #     self.config.config["mqtt"]["clientid"],
-        #     self.config.config["mqtt"]["clean_session"],
-        #     self.config.config["mqtt"]["publish_topic_prefix"],
-        #     self.config.config["mqtt"]["request_topic"],
-        #     self.config.config["mqtt"]["qos"],
-        #     self.config.config["mqtt"]["retain"],
-        #     self.config.config["mqtt"]["reconnect_period_sec"],
-        #     ha_status_topic)
+        #
+        # create MqttClient
+        #
+        ha_status_topic = ""
+        if self.config.config["mqtt"]["ha_discovery"]["enabled"]:
+            ha_status_topic = self.config.config["mqtt"]["ha_discovery"]["topic"] + "/status"
+        self.mqtt_client = MqttClient(
+            self.config.config["mqtt"]["clientid"],
+            False,
+            self.config.config["mqtt"]["publish_topic_prefix"],
+            self.config.config["mqtt"]["request_topic"],
+            self.config.config["mqtt"]["qos"],
+            self.config.config["mqtt"]["retain"],
+            self.config.config["mqtt"]["reconnect_period_sec"],
+            ha_status_topic)
 
         # #
         # # parse schedule
@@ -314,7 +313,8 @@ class Optolink2MqttApp:
 
         while self.keep_running:
             # execute all tasks waiting in the queue
-            delay_for_next_task_sec = self.scheduler.run(blocking=False)
+            # delay_for_next_task_sec = self.scheduler.run(blocking=False)
+            delay_for_next_task_sec = 100
 
             # execute a sliced wait, so we reuse this thread to check for other occurrences
             # (instead of resorting to a multithread Python app)
@@ -352,44 +352,44 @@ class Optolink2MqttApp:
                         self.run_all_tasks()
 
     def run(self) -> int:
-        # # estabilish a connection to the MQTT broker
-        # try:
-        #     self.mqtt_client.connect(
-        #         self.config.config["mqtt"]["broker"]["host"],
-        #         self.config.config["mqtt"]["broker"]["port"],
-        #         self.config.config["mqtt"]["broker"]["username"],
-        #         self.config.config["mqtt"]["broker"]["password"])
-        # except ConnectionRefusedError as e:
-        #     logging.error(f"Cannot connect to MQTT broker: {e}. Retrying shortly.")
-        #     # IMPORTANT: there's no need to abort here -- paho MQTT client loop_start() will keep trying to reconnect
-        #     # so, if and when the MQTT broker will be available, the connection will be established
-        # except OSError as e:
-        #     logging.error(f"Cannot connect to MQTT broker: {e}. Retrying shortly.")
-        #     # IMPORTANT: there's no need to abort here -- paho MQTT client loop_start() will keep trying to reconnect
-        #     # so, if and when the MQTT broker will be available, the connection will be established
+        # estabilish a connection to the MQTT broker
+        try:
+            self.mqtt_client.connect(
+                self.config.config["mqtt"]["broker"]["host"],
+                self.config.config["mqtt"]["broker"]["port"],
+                self.config.config["mqtt"]["broker"]["username"],
+                self.config.config["mqtt"]["broker"]["password"])
+        except ConnectionRefusedError as e:
+            logging.error(f"Cannot connect to MQTT broker: {e}. Retrying shortly.")
+            # IMPORTANT: there's no need to abort here -- paho MQTT client loop_start() will keep trying to reconnect
+            # so, if and when the MQTT broker will be available, the connection will be established
+        except OSError as e:
+            logging.error(f"Cannot connect to MQTT broker: {e}. Retrying shortly.")
+            # IMPORTANT: there's no need to abort here -- paho MQTT client loop_start() will keep trying to reconnect
+            # so, if and when the MQTT broker will be available, the connection will be established
 
-        # self.last_ha_discovery_messages_connection_id = MqttClient.CONN_ID_INVALID
+        self.last_ha_discovery_messages_connection_id = MqttClient.CONN_ID_INVALID
 
-        # # block the main thread on the MQTT client loop
-        # self.keep_running = True
-        # while self.keep_running:
-        #     try:
-        #         # restart the MQTT client secondary thread in case it was never started or failed for some reason
-        #         self.mqtt_client.loop_start()
+        # block the main thread on the MQTT client loop
+        self.keep_running = True
+        while self.keep_running:
+            try:
+                # restart the MQTT client secondary thread in case it was never started or failed for some reason
+                self.mqtt_client.loop_start()
 
-        #         # run till an exception is thrown:
-        #         self._core_loop()
+                # run till an exception is thrown:
+                self._core_loop()
 
-        #     # try to recover from exceptions:
-        #     except socket.error:
-        #         logging.error("socket.error caught, sleeping for 5 sec...")
-        #         time.sleep(self.config.config["mqtt"]["reconnect_period_sec"])
-        #     except KeyboardInterrupt:
-        #         logging.warning("KeyboardInterrupt caught, exiting")
-        #         break
+            # try to recover from exceptions:
+            except socket.error:
+                logging.error("socket.error caught, sleeping for 5 sec...")
+                time.sleep(self.config.config["mqtt"]["reconnect_period_sec"])
+            except KeyboardInterrupt:
+                logging.warning("KeyboardInterrupt caught, exiting")
+                break
 
-        # # gracefully stop the event loop of MQTT client
-        # self.mqtt_client.loop_stop()
+        # gracefully stop the event loop of MQTT client
+        self.mqtt_client.loop_stop()
 
         # # log status one last time
         # Optolink2MqttApp.log_status()
