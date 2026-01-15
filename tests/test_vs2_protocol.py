@@ -76,7 +76,11 @@ try:
         time.sleep(2)
 
         buff = proto.read_datapoint(0x27D4, 1)
-        logging.info("Niveau read back", OptolinkVS2Protocol.readable_hex(buff), OptolinkVS2Protocol.bytesval(buff))
+        logging.info(
+            "Niveau read back",
+            OptolinkVS2Protocol.readable_hex(buff),
+            OptolinkVS2Protocol.bytesval(buff),
+        )
 
 except KeyboardInterrupt:
     logging.info("\nProgram ended.")

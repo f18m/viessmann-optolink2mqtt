@@ -38,7 +38,7 @@ mqtt_broker:
 poll_item_def: 
   name: str()
   sampling_period: str()
-  register: str()
+  register: int()
   length: int()
   signed: bool()
   ha_discovery: include('pollitem_ha_discovery',required=False)

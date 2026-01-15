@@ -61,11 +61,18 @@ mqtt:
 # this is the core of config, defininig which registers should be read by optolink2mqtt, how frequently and
 # how they should be published to MQTT
 registers_poll_list:
+
   - name: external_temperature
     sampling_period: "every 10 seconds"
+
+    # each register of the Viessmann device has a few key attributes you need to know/discover:
+    # the address, its length (in bytes) and whether the number contained is signed or not
     register: 0x0101
     length: 2
     signed: false
+
+    # the whole "ha_discovery" section is optional and is useful only if you have
+    # mqtt.ha_discovery.enabled set to "true" and you use HomeAssistant.
     ha_discovery:
       name: "External Temperature"
       platform: sensor
