@@ -240,7 +240,9 @@ class Optolink2MqttApp:
         #
         ha_status_topic = ""
         if self.config.config["mqtt"]["ha_discovery"]["enabled"]:
-            ha_status_topic = self.config.config["mqtt"]["ha_discovery"]["topic"] + "/status"
+            ha_status_topic = (
+                self.config.config["mqtt"]["ha_discovery"]["topic"] + "/status"
+            )
         self.mqtt_client = MqttClient(
             self.config.config["mqtt"]["clientid"],
             False,
@@ -249,7 +251,8 @@ class Optolink2MqttApp:
             self.config.config["mqtt"]["qos"],
             self.config.config["mqtt"]["retain"],
             self.config.config["mqtt"]["reconnect_period_sec"],
-            ha_status_topic)
+            ha_status_topic,
+        )
 
         # #
         # # parse schedule
@@ -358,7 +361,8 @@ class Optolink2MqttApp:
                 self.config.config["mqtt"]["broker"]["host"],
                 self.config.config["mqtt"]["broker"]["port"],
                 self.config.config["mqtt"]["broker"]["username"],
-                self.config.config["mqtt"]["broker"]["password"])
+                self.config.config["mqtt"]["broker"]["password"],
+            )
         except ConnectionRefusedError as e:
             logging.error(f"Cannot connect to MQTT broker: {e}. Retrying shortly.")
             # IMPORTANT: there's no need to abort here -- paho MQTT client loop_start() will keep trying to reconnect
