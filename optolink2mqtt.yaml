@@ -1,0 +1,73 @@
+#
+# Viessmann-optolink2mqtt configuration file
+# All values shown here are the default values
+#
+
+logging:
+  level: DEBUG
+
+optolink:
+  port: '/dev/ttyUSB0'     # Serial port for Optolink device (mandatory, default: '/dev/ttyUSB0')
+  timeout_seconds: 120     # Timeout (seconds) for VS2 protocol detection (default: 120)
+  show_received_bytes: False # Useful for debugging purposes only
+
+mqtt:
+  # broker: details about the MQTT broker
+  broker:
+    host: localhost
+    port: 1883
+    #username:
+    #password:
+  
+  # client_id: the identifier of the MQTT client created by optolink2mqtt; this is useful to identify optolink2mqtt
+  # when inspecting the MQTT broker logs
+  clientid: optolink2mqtt
+  
+  # qos: it can be:
+  #  - At most once (QoS 0)
+  #  - At least once (QoS 1)
+  #  - Exactly once (QoS 2)
+  # see https://www.hivemq.com/blog/mqtt-essentials-part-6-mqtt-quality-of-service-levels/
+  qos: 0
+  
+  # retain: if set to true, the message will be set as the "last known good"/retained message for 
+  # each topic populated by optolink2mqtt
+  retain: false
+
+  # reconnect_period_sec: defines how frequently optolink2mqtt will re-attempt a connection to the MQTT broker
+  # if the connection is lost. You should be setting this parameter to the smallest value that makes sense
+  # according to your optolink2mqtt scheduling rules.
+  reconnect_period_sec: 5
+
+  # request: name of the topic that optolink2mqtt will subscribe to, and where it will wait for information requests;
+  # to activate the request just send any payload message (e.g. "REQUEST") to a topic like:
+  # <optolink2mqtt/COMPUTER_NAME/request/cpu_percent>. 
+  request_topic: "optolink2mqtt/request/"
+
+  ha_discovery:
+    # ha_discovery.enabled: if set to true, optolink2mqtt will publish a "homeassistant" MQTT discovery topic
+    # for each task having the 'ha_discovery' configuration parameters set.
+    # This will enable HomeAssistant to immediately recognize as sensors the information published by optolink2mqtt
+    # (see https://www.home-assistant.io/integrations/sensor.mqtt/)
+    enabled: true
+
+    # ha_discovery.topic: defines the topic that optolink2mqtt will publish its "homeassistant" MQTT discovery topics;
+    topic: homeassistant
+
+    # ha_discovery.device_name: the name of the device grouping all sensors published to HomeAssistant;
+    # it defaults to the <hostname> of the computer
+    #device_name: 
+
+# this is the core of config, defininig which registers should be read by optolink2mqtt, how frequently and
+# how they should be published to MQTT
+registers_poll_list:
+  - name: external_temperature
+    sampling_period: "every 10 seconds"
+    register: 0x0101
+    length: 2
+    signed: false
+    ha_discovery:
+      name: "External Temperature"
+      platform: sensor
+      device_class: temperature
+      unit_of_measurement: "C"
