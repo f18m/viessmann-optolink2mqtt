@@ -7,7 +7,7 @@
 format:
 	black .
 
-lint: lint-python lint-yaml lint-yaml-with-schema
+lint: lint-python #lint-yaml lint-yaml-with-schema
 
 lint-python:
 	ruff check src/

@@ -6,13 +6,11 @@ import serial
 import os
 import logging
 
-# load most updated code living in the parent dir
+# load most updated code living in the parent dir ../src/optolink2mqtt
 THIS_SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 SRC_DIR = os.path.realpath(THIS_SCRIPT_DIR + "/../src")
 sys.path.append(SRC_DIR)
-from optolink2mqtt.optolinkvs2 import (
-    OptolinkVS2Protocol,
-)  # assumes you have the wheel installed
+from optolink2mqtt.optolinkvs2 import OptolinkVS2Protocol  # noqa: E402
 
 # --------------------
 # main for test only
@@ -33,17 +31,17 @@ try:
     if not proto.init_vs2():
         raise Exception("init_vs2 failed")
 
-    logging.info(f"VS2 Protocol initialized on port {port}")
+    logging.info(f"VS2 protocol successfully initialized on port {port}")
 
     # read test
     if True:
         while True:
-            logging.info(f"Reading test datapoint 0x00F8...")
+            logging.info("Reading test datapoint 0x00F8...")
             buff = proto.read_datapoint(0x00F8, 8)
             logging.info(
                 f"Datapoint content is: {OptolinkVS2Protocol.readable_hex(buff)}"
             )
-            time.sleep(0.1)
+            time.sleep(0.5)
 
     # write test
     if False:
@@ -78,7 +76,7 @@ try:
         time.sleep(2)
 
         buff = proto.read_datapoint(0x27D4, 1)
-        logging.info("Niveau read back", utils.readable_hex(buff), bytesval(buff))
+        logging.info("Niveau read back", OptolinkVS2Protocol.readable_hex(buff), OptolinkVS2Protocol.bytesval(buff))
 
 except KeyboardInterrupt:
     logging.info("\nProgram ended.")
