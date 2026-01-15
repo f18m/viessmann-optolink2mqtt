@@ -114,7 +114,7 @@ class Optolink2MqttApp:
         that contains a 'version' variable with the version string.
         """
 
-        from _optolink2mqtt_version import version as __version__
+        from ._optolink2mqtt_version import version as __version__
 
         return __version__
 
@@ -232,7 +232,7 @@ class Optolink2MqttApp:
         #
 
         logging.info(
-            f"Optolink2MqttApp version {Optolink2MqttApp.get_embedded_version()} starting up"
+            f"Optolink2MqttApp version {Optolink2MqttApp.get_embedded_version()} starting"
         )
 
         #
