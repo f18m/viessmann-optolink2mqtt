@@ -1,5 +1,5 @@
 """
-optolinkvs2.py
+optolinkvs2_protocol.py
 ----------------
 Optolink VS2 / 300 Protocol handler
 Reworked by Francesco Montorsi based on the original code by philippoo66

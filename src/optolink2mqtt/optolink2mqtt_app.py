@@ -15,7 +15,7 @@
 import argparse
 import os
 
-# import sched
+import sched
 import socket
 import logging
 import sys
@@ -25,6 +25,7 @@ import time
 
 from .config import Config
 from .mqtt_client import MqttClient
+from .optolinkvs2_register import OptolinkVS2Register
 
 
 class Optolink2MqttApp:
@@ -36,45 +37,26 @@ class Optolink2MqttApp:
         self.scheduler = None  # instance of sched.scheduler
 
         self.last_logged_status = (None, None, None)
-        self.schedule_list = []  # list of Schedule instances
+        self.register_list = []  # list of Schedule instances
 
-    # @staticmethod
-    # def on_schedule_timer(app: 'optolink2mqttApp', schedule: Schedule) -> None:
-    #     '''
-    #     Takes a list of tasks to be run immediately.
-    #     The list must contain dictionary items, each having "task", "params", "topic" and "formatter" fields.
-    #     E.g.:
-    #         [
-    #         { "task: "cpu_percent",
-    #             "params": [],
-    #             "topic": None,
-    #             "formatter": None },
-    #         { "task": "virtual_memory",
-    #             "params": [ "percent" ],
-    #             "topic": "foobar",
-    #             "formatter": None }
-    #         ]
-    #     '''
+    @staticmethod
+    def on_schedule_timer(app: "Optolink2MqttApp", reg: OptolinkVS2Register) -> None:
+        """
+        Takes a register to read from the Viessmann device.
+        """
 
-    #     task_list = schedule.get_tasks()
-    #     logging.debug("optolink2mqttApp.on_schedule_timer(%s, %d tasks)", schedule.parsed_rrule, len(task_list))
+        logging.debug(
+            f"Optolink2MqttApp.on_schedule_timer(name={reg.name}, addr=0x{reg.address:02x})",
+        )
 
-    #     # support for the "exit_after" feature
-    #     exit_after = app.config.config["options"]["exit_after_num_tasks"]
-    #     reschedule = True
-
-    #     for task in task_list:
-    #         # main entrypoint for TASK execution:
-    #         task.run_task(app.mqtt_client)
-
-    #         if exit_after > 0 and Task.num_total_tasks_executed() >= exit_after:
-    #             reschedule = False
-    #             break
-
-    #     # add next timer task
-    #     if reschedule:
-    #         app.scheduler.enter(schedule.get_next_occurrence(), 1, optolink2mqttApp.on_schedule_timer, (app, schedule))
-    #     return
+        # add next timer task
+        app.scheduler.enter(
+            reg.get_next_occurrence_in_seconds(),
+            1,
+            Optolink2MqttApp.on_schedule_timer,
+            (app, reg),
+        )
+        return
 
     # @staticmethod
     # def log_status() -> None:
@@ -140,7 +122,7 @@ class Optolink2MqttApp:
     #         "connections": [["mac", get_mac_address()]],
     #     }
     #     num_msgs = 0
-    #     for sch in self.schedule_list:
+    #     for sch in self.register_list:
 
     #         expire_time_sec = sch.get_max_interval_sec()
     #         if expire_time_sec == -1:
@@ -171,7 +153,7 @@ class Optolink2MqttApp:
         Returns the number of tasks that were run.
         """
         num_tasks = 0
-        for sch in self.schedule_list:
+        for sch in self.register_list:
             for task in sch.get_tasks():
                 task.run_task(self.mqtt_client)
                 num_tasks += 1
@@ -254,37 +236,46 @@ class Optolink2MqttApp:
             ha_status_topic,
         )
 
-        # #
-        # # parse schedule
-        # #
-        # schedule = self.config.config["registers_poll_list"]
-        # assert isinstance(schedule, list)
-        # if not schedule:
-        #     logging.error("No schedule to execute, exiting")
-        #     return 3
+        #
+        # parse schedule
+        #
+        register_list = self.config.config["registers_poll_list"]
+        assert isinstance(register_list, list)
+        if not register_list:
+            logging.error("No registers to read and poll, exiting")
+            return 3
 
-        # self.scheduler = sched.scheduler(time.time, time.sleep)
-        # i = 0
-        # for sch in schedule:
-        #     try:
-        #         new_schedule = Schedule(sch['cron'],
-        #                                 sch['tasks'],
-        #                                 self.config.config["mqtt"]["publish_topic_prefix"],
-        #                                 i)
-        #     except ValueError as e:
-        #         logging.error(f"Cannot parse schedule #{i}: {e}. Aborting.")
-        #         return 4
+        self.scheduler = sched.scheduler(time.time, time.sleep)
+        i = 0
+        for reg in register_list:
+            try:
+                register_instance = OptolinkVS2Register(
+                    reg["name"],
+                    reg["sampling_period_seconds"],
+                    reg["register"],
+                    reg["length"],
+                    reg["signed"],
+                    reg["ha_discovery"],
+                )
+            except ValueError as e:
+                logging.error(f"Cannot parse register definition #{i}: {e}. Aborting.")
+                return 4
 
-        #     # upon startup optolink2mqtt will immediately run all scheduling rules, just
-        #     # scattered 100ms one from each other:
-        #     first_time_delay_sec = i + 0.1
+            # upon startup optolink2mqtt will immediately run all scheduling rules, just
+            # scattered 100ms one from each other:
+            first_time_delay_sec = i + 0.1
 
-        #     # include this in our scheduler:
-        #     self.scheduler.enter(first_time_delay_sec, 1, optolink2mqttApp.on_schedule_timer, (self, new_schedule))
-        #     i += 1
+            # include this in our scheduler:
+            self.scheduler.enter(
+                first_time_delay_sec,
+                1,
+                Optolink2MqttApp.on_schedule_timer,
+                (self, register_instance),
+            )
+            i += 1
 
-        #     # store the Schedule also locally:
-        #     self.schedule_list.append(new_schedule)
+            # store the Schedule also locally:
+            self.register_list.append(register_instance)
 
         # # add periodic log
         # try:
@@ -316,8 +307,7 @@ class Optolink2MqttApp:
 
         while self.keep_running:
             # execute all tasks waiting in the queue
-            # delay_for_next_task_sec = self.scheduler.run(blocking=False)
-            delay_for_next_task_sec = 100
+            delay_for_next_task_sec = self.scheduler.run(blocking=False)
 
             # execute a sliced wait, so we reuse this thread to check for other occurrences
             # (instead of resorting to a multithread Python app)
