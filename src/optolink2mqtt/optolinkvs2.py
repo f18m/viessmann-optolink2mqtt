@@ -32,6 +32,9 @@ import logging
 class OptolinkVS2Protocol:
     """
     Optolink VS2 / 300 Protocol handler
+
+    See https://github.com/sarnau/InsideViessmannVitosoft/blob/main/VitosoftCommunication.md
+        https://github.com/openv/openv/wiki/Protokoll-300
     """
 
     def __init__(

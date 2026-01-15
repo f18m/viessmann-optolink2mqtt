@@ -1,0 +1,6 @@
+[flake8]
+# E501 line too long 
+# E203 whitespace before ':'
+extend-ignore = E501,E203
+exclude = doc,.git,.mypy_cache,__pycache__,.vscode
+max-complexity = 21
