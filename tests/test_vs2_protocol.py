@@ -1,40 +1,57 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import sys
 import time
 import serial
-from optolink2mqtt.optolinkvs2 import OptolinkVS2Protocol  # assumes you have the wheel installed
+import os
+import logging
+
+# load most updated code living in the parent dir
+THIS_SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+SRC_DIR = os.path.realpath(THIS_SCRIPT_DIR + "/../src")
+sys.path.append(SRC_DIR)
+from optolink2mqtt.optolinkvs2 import (
+    OptolinkVS2Protocol,
+)  # assumes you have the wheel installed
 
 # --------------------
 # main for test only
 # --------------------
-port = "/dev/ttyUSB0"  #'COM1'
+
+port = "/dev/ttyUSB0"
 if len(sys.argv) > 1:
     port = sys.argv[1]
 
+logging.basicConfig(level=logging.DEBUG, force=True)
+
 ser = serial.Serial(port, baudrate=4800, bytesize=8, parity="E", stopbits=2, timeout=0)
-proto = OptolinkVS2Protocol(ser)
+proto = OptolinkVS2Protocol(ser, show_opto_rx=True)
 
 try:
     if not ser.is_open:
         ser.open()
     if not proto.init_vs2():
-        raise Exception("init_vs2 failed.")
+        raise Exception("init_vs2 failed")
+
+    logging.info(f"VS2 Protocol initialized on port {port}")
 
     # read test
     if True:
         while True:
+            logging.info(f"Reading test datapoint 0x00F8...")
             buff = proto.read_datapoint(0x00F8, 8)
-            print("0x00f8", OptolinkVS2Protocol.bbbstr(buff))
+            logging.info(
+                f"Datapoint content is: {OptolinkVS2Protocol.readable_hex(buff)}"
+            )
             time.sleep(0.1)
 
     # write test
     if False:
         buff = proto.read_datapoint(0x27D4, 1)
         currval = buff
-        print(
+        logging.info(
             "Niveau Ist",
-            OptolinkVS2Protocol.bbbstr(buff),
+            OptolinkVS2Protocol.readable_hex(buff),
             OptolinkVS2Protocol.bytesval(buff),
         )
 
@@ -42,35 +59,35 @@ try:
 
         data = bytes([50])
         ret = proto.write_datapoint(0x27D4, data)
-        print("write succ", ret)
+        logging.info("write succ", ret)
 
         time.sleep(2)
 
         buff = proto.read_datapoint(0x27D4, 1)
-        print(
+        logging.info(
             "Niveau neu",
-            OptolinkVS2Protocol.bbbstr(buff),
+            OptolinkVS2Protocol.readable_hex(buff),
             OptolinkVS2Protocol.bytesval(buff),
         )
 
         time.sleep(1)
 
         ret = proto.write_datapoint(0x27D4, currval)
-        print("write back succ", ret)
+        logging.info("write back succ", ret)
 
         time.sleep(2)
 
         buff = proto.read_datapoint(0x27D4, 1)
-        print("Niveau read back", utils.bbbstr(buff), bytesval(buff))
+        logging.info("Niveau read back", utils.readable_hex(buff), bytesval(buff))
 
 except KeyboardInterrupt:
-    print("\nProgram ended.")
+    logging.info("\nProgram ended.")
 except Exception as e:
-    print(e)
+    logging.error(e)
 finally:
     # Serial Port close
     if ser.is_open:
-        print("exit close")
+        logging.info("exit close")
         # re-init KW protocol
         ser.write(bytes([0x04]))
         ser.close()
