@@ -1,2 +1,4 @@
 pyserial
 paho-mqtt
+yamale==6.0.0
+platformdirs==4.3.7
