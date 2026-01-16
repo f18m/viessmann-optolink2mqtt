@@ -11,11 +11,13 @@ Open source interface between a Viessmann device (heat pump, gas heater, etc) an
 
 * A Single Board Computer (SBC) which is capable of running Python and has a USB-A connector
   (if you plan to use the original Viessmann Optolink USB cable)
-* The Optolink USB cable to read/write; you have two main options: a) buy the original Viessmann cable on specialized shops such as [https://www.loebbeshop.de/](https://www.loebbeshop.de/); see exact item [here](https://www.loebbeshop.de/viessmann/ersatzteil/anschlussleitung-usb-optolink-fuer-vitoconnetc-artikel-7856059/) or b) build your own cable, more details 
+* The Optolink USB cable to read/write; you have two main options: a) buy the original Viessmann cable on specialized shops such as [https://www.loebbeshop.de/](https://www.loebbeshop.de/); see exact item [here](https://www.loebbeshop.de/viessmann/ersatzteil/anschlussleitung-usb-optolink-fuer-vitoconnetc-artikel-7856059/) or b) build your own cable, more details available from other tinkerers like [MyVitotronicLogger](https://github.com/Ixtalo/MyVitotronicLogger) or at [Optolink splitter readme](https://github.com/philippoo66/optolink-splitter)
 
 ## Installation
 
 This project supports 2 main installation methods: PyPi and Docker.
+Both methods are meant to be used from a Linux Operating system which has the USB/DIY cable attached
+(see "Hardware" section above).
 
 ### Pypi package
 
@@ -41,6 +43,12 @@ docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
 
 This software accepts a declarative configuration in YAML format.
 Please look at the [optolink2mqtt.yaml](./optolink2mqtt.yaml) file as reference source for the syntax.
+
+
+## How to discover register addresses
+
+TO BE WRITTEN
+
 
 ## Related projects
 
