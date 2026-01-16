@@ -7,9 +7,8 @@ logging:
   level: DEBUG
 
 optolink:
-  port: '/dev/ttyUSB0'     # Serial port for Optolink device (mandatory, default: '/dev/ttyUSB0')
-  timeout_seconds: 120     # Timeout (seconds) for VS2 protocol detection (default: 120)
-  show_received_bytes: False # Useful for debugging purposes only
+  serial_port: '/dev/ttyUSB0'     # Serial port for Optolink device (mandatory, default: '/dev/ttyUSB0')
+  show_received_bytes: False      # Useful for debugging purposes only
 
 mqtt:
   # broker: details about the MQTT broker

@@ -37,10 +37,13 @@ try:
     if True:
         while True:
             logging.info("Reading test datapoint 0x00F8...")
-            buff = proto.read_datapoint(0x00F8, 8)
-            logging.info(
-                f"Datapoint content is: {OptolinkVS2Protocol.readable_hex(buff)}"
-            )
+            rxdata = proto.read_datapoint_ext(0x00F8, 8)
+            if rxdata.is_successful():
+                logging.info(
+                    f"Datapoint content is: {OptolinkVS2Protocol.readable_hex(rxdata.data)}"
+                )
+            else:
+                logging.error(f"Error reading datapoint: code {rxdata.retcode:#02x}")
             time.sleep(0.5)
 
     # write test

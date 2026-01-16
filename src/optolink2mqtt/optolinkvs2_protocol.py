@@ -3,8 +3,12 @@ optolinkvs2_protocol.py
 ----------------
 Optolink VS2 / 300 Protocol handler
 Reworked by Francesco Montorsi based on the original code by philippoo66
+by making it object-oriented and easier to integrate in other projects,
+decoupling from MQTT and remoing references to global variables.
 
-TODO: remove mqtt_publ_callback to move MQTT logic out of this class
+TODO: collect return codes in an Enum
+TODO: replace hardcoded protocol constants with named constants
+TODO: add stats for errors, timeouts, retries, etc.
 
 ----------------
 
@@ -25,8 +29,40 @@ limitations under the License.
 
 import time
 import serial
-
 import logging
+
+
+class OptolinkVS2RxData:
+    """
+    OptolinkVS2RxData holds a VS2 telegram received over Optolink interface,
+    plus some extra attribute:
+
+    1. **ReturnCode (int)**
+        Receive status code:
+        - 0x01 = Success
+        - 0x03 = Error message
+        - 0x15 = NACK
+        - 0x20 = Byte0 unknown error
+        - 0x41 = STX error
+        - 0xAA = Handle lost
+        - 0xFD = Packet length error
+        - 0xFE = CRC error
+        - 0xFF = Timeout
+
+    2. **Addr (int)**
+        Address of the data point.
+
+    3. **Data (bytearray)**
+        Payload data of the received telegram.
+    """
+
+    def __init__(self, return_code: int, address: int, data: bytearray):
+        self.return_code = return_code
+        self.address = address
+        self.data = data
+
+    def is_successful(self) -> bool:
+        return self.return_code == 0x01
 
 
 class OptolinkVS2Protocol:
@@ -41,7 +77,6 @@ class OptolinkVS2Protocol:
         self,
         ser: serial.Serial,
         ser2: serial.Serial = None,
-        mqtt_publ_callback=None,
         show_opto_rx: bool = False,
     ):
         """
@@ -50,13 +85,14 @@ class OptolinkVS2Protocol:
         ser : serial.Serial
             Primary serial interface
         ser2 : serial.Serial, optional
-            Secondary serial interface (forwarding / duplex)
-        mqtt_publ_callback : callable, optional
-            Callback for MQTT publishing
+            Secondary serial interface. This is used in the original optolink-splitter project
+            to forward every received byte to another serial port connected to the Vitoconnect device.
+            This is currently not supported by optolink2mqtt but might be in future.
+        show_opto_rx : bool, optional
+            If True, received Optolink bytes are logged for debugging purposes
         """
         self.ser = ser
         self.ser2 = ser2
-        self.mqtt_publ_callback = mqtt_publ_callback
         self.show_opto_rx = show_opto_rx
 
     # ------------------------------------------------------------------
@@ -103,11 +139,12 @@ class OptolinkVS2Protocol:
     # Datapoint read/write
     # ------------------------------------------------------------------
 
-    def read_datapoint(self, addr: int, rdlen: int) -> bytes:
-        _, _, data = self.read_datapoint_ext(addr, rdlen)
-        return data
+    # deprecated because does not return error code
+    # def read_datapoint(self, addr: int, rdlen: int) -> bytes:
+    #     rxdata = self.read_datapoint_ext(addr, rdlen)
+    #     return rxdata.data
 
-    def read_datapoint_ext(self, addr: int, rdlen: int) -> tuple[int, int, bytearray]:
+    def read_datapoint_ext(self, addr: int, rdlen: int) -> OptolinkVS2RxData:
         outbuff = bytearray(8)
         outbuff[0] = 0x41  # 0x41 frame start
         outbuff[1] = 0x05  # Len Payload
@@ -121,13 +158,14 @@ class OptolinkVS2Protocol:
         self.ser.reset_input_buffer()
         self.ser.write(outbuff)
 
-        return self.receive_telegr(resptelegr=True, raw=False)
+        return self.receive_telegram(resptelegr=True, raw=False)
 
-    def write_datapoint(self, addr: int, data: bytes) -> bool:
-        retcode, _, _ = self.write_datapoint_ext(addr, data)
-        return retcode == 0x01
+    # deprecated because does not return error code
+    # def write_datapoint(self, addr: int, data: bytes) -> bool:
+    #     retcode, _, _ = self.write_datapoint_ext(addr, data)
+    #     return retcode == 0x01
 
-    def write_datapoint_ext(self, addr: int, data: bytes) -> tuple[int, int, bytearray]:
+    def write_datapoint_ext(self, addr: int, data: bytes) -> OptolinkVS2RxData:
         wrlen = len(data)
         outbuff = bytearray(wrlen + 8)
         outbuff[0] = 0x41
@@ -144,7 +182,7 @@ class OptolinkVS2Protocol:
         self.ser.reset_input_buffer()
         self.ser.write(outbuff)
 
-        return self.receive_telegr(resptelegr=True, raw=False)
+        return self.receive_telegram(resptelegr=True, raw=False)
 
     # ------------------------------------------------------------------
     # Generic request
@@ -152,7 +190,7 @@ class OptolinkVS2Protocol:
 
     def do_request(
         self, fctcode: int, addr: int, rlen: int, data: bytes = b"", protid: int = 0x00
-    ) -> tuple[int, int, bytearray]:
+    ) -> OptolinkVS2RxData:
         pldlen = 5 + len(data)
         outbuff = bytearray(pldlen + 3)  # + STX, LEN, CRC
 
@@ -172,13 +210,13 @@ class OptolinkVS2Protocol:
         self.ser.reset_input_buffer()
         self.ser.write(outbuff)
 
-        return self.receive_telegr(resptelegr=True, raw=False)
+        return self.receive_telegram(resptelegr=True, raw=False)
 
     # ------------------------------------------------------------------
     # Telegram receive
     # ------------------------------------------------------------------
 
-    def receive_telegr(self, resptelegr: bool, raw: bool) -> tuple[int, int, bytearray]:
+    def receive_telegram(self, resptelegr: bool, raw: bool) -> OptolinkVS2RxData:
         """
         Receives a VS2 telegram in response to a Virtual_READ or Virtual_WRITE request.
 
@@ -196,25 +234,7 @@ class OptolinkVS2Protocol:
         Return values:
         -------------
 
-        A tuple[int, int, bytearray], containing the following elements:
-
-        1. **ReturnCode (int)**
-            Receive status code:
-            - 0x01 = Success
-            - 0x03 = Error message
-            - 0x15 = NACK
-            - 0x20 = Byte0 unknown error
-            - 0x41 = STX error
-            - 0xAA = Handle lost
-            - 0xFD = Packet length error
-            - 0xFE = CRC error
-            - 0xFF = Timeout
-
-        2. **Addr (int)**
-            Address of the data point.
-
-        3. **Data (bytearray)**
-            Payload data of the received telegram.
+        An OptolinkVS2RxData instance.
 
         Notes:
         ---------
@@ -225,10 +245,10 @@ class OptolinkVS2Protocol:
         alldata = bytearray()
         retdata = bytearray()
         addr = 0
-        msgid = 0x100  # message type identifier, byte 2 (3. byte; 0 = Request Message, 1 = Response Message, 2 = UNACKD Message, 3 = Error Message)
-        msqn = 0x100  # message sequence number, top 3 bits of byte 3
-        fctcd = 0x100  # function code, low 5 bis of byte 3 (https://github.com/sarnau/InsideViessmannVitosoft/blob/main/VitosoftCommunication.md#defined-commandsfunction-codes)
-        dlen = -1
+        # msgid = 0x100  # message type identifier, byte 2 (3. byte; 0 = Request Message, 1 = Response Message, 2 = UNACKD Message, 3 = Error Message)
+        # msqn = 0x100  # message sequence number, top 3 bits of byte 3
+        # fctcd = 0x100  # function code, low 5 bis of byte 3 (https://github.com/sarnau/InsideViessmannVitosoft/blob/main/VitosoftCommunication.md#defined-commandsfunction-codes)
+        # dlen = -1
 
         # for up 30x100ms serial data is read. (we do 600x5ms)
         for _ in range(600):
@@ -241,7 +261,7 @@ class OptolinkVS2Protocol:
                     if self.ser2:
                         self.ser2.write(inbytes)
             except Exception:
-                return 0xAA, 0, retdata
+                return OptolinkVS2RxData(0xAA, 0, retdata)
 
             if state == 0:
                 if not resptelegr:
@@ -256,13 +276,13 @@ class OptolinkVS2Protocol:
 
                     elif inbuff[0] == 0x15:  # VS2_NACK
                         logging.error("VS2 NACK Error")
-                        return self._return(
-                            0x15, addr, alldata, msgid, msqn, fctcd, dlen, raw
+                        return OptolinkVS2RxData(
+                            0x15, addr, alldata if not raw else bytearray(alldata)
                         )
                     else:
                         logging.error("VS2 unknown first byte error")
-                        return self._return(
-                            0x20, addr, alldata, msgid, msqn, fctcd, dlen, raw
+                        return OptolinkVS2RxData(
+                            0x20, addr, alldata if not raw else bytearray(alldata)
                         )
 
                     # Separate the first byte
@@ -277,8 +297,8 @@ class OptolinkVS2Protocol:
                 if inbuff[0] != 0x41:  # STX
                     logging.error(f"VS2 STX Error: {inbuff.hex()}")
                     # It might be necessary to wait for any remaining part of the telegram.
-                    return self._return(
-                        0x41, addr, alldata, msgid, msqn, fctcd, dlen, raw
+                    return OptolinkVS2RxData(
+                        0x41, addr, alldata if not raw else bytearray(alldata)
                     )
                 state = 2
 
@@ -286,8 +306,8 @@ class OptolinkVS2Protocol:
                 pllen = inbuff[1]
                 if pllen < 5:  # protocol_Id + MsgId|FnctCode + AddrHi + AddrLo + BlkLen
                     logging.error(f"VS2 Len Error: {pllen}")
-                    return self._return(
-                        0xFD, addr, alldata, msgid, msqn, fctcd, dlen, raw
+                    return OptolinkVS2RxData(
+                        0xFD, addr, alldata if not raw else bytearray(alldata)
                     )
                 if len(inbuff) >= pllen + 3:  # STX + Len + Payload + CRC
 
@@ -296,37 +316,37 @@ class OptolinkVS2Protocol:
 
                     # receive complete
                     inbuff = inbuff[: pllen + 4]  # make sure no tailing trash
-                    msgid = inbuff[2]
-                    msqn = (inbuff[3] & 0xE0) >> 5
-                    fctcd = inbuff[3] & 0x1F
+                    # msgid = inbuff[2]
+                    # msqn = (inbuff[3] & 0xE0) >> 5
+                    # fctcd = inbuff[3] & 0x1F
                     addr = (inbuff[4] << 8) + inbuff[5]
-                    dlen = inbuff[6]
+                    # dlen = inbuff[6]
                     retdata = inbuff[7 : pllen + 2]
 
                     if inbuff[-1] != self.calc_crc(inbuff):
                         logging.error("VS2 CRC Error")
-                        return self._return(
-                            0xFE, addr, retdata, msgid, msqn, fctcd, dlen, raw
+                        return OptolinkVS2RxData(
+                            0xFE, addr, retdata if not raw else bytearray(alldata)
                         )
 
                     if inbuff[2] & 0x0F == 0x03:
-                        return self._return(
-                            0x03, addr, retdata, msgid, msqn, fctcd, dlen, raw
+                        return OptolinkVS2RxData(
+                            0x03, addr, retdata if not raw else bytearray(alldata)
                         )
 
-                    return self._return(
-                        0x01, addr, retdata, msgid, msqn, fctcd, dlen, raw
+                    return OptolinkVS2RxData(
+                        0x01, addr, retdata if not raw else bytearray(alldata)
                     )
 
         # timed-out if we get here
 
-        return self._return(0xFF, addr, retdata, msgid, msqn, fctcd, dlen, raw)
+        return OptolinkVS2RxData(0xFF, addr, retdata if not raw else bytearray(retdata))
 
     # ------------------------------------------------------------------
     # Raw receive
     # ------------------------------------------------------------------
 
-    def receive_fullraw(self, eot_time: float, timeout: float):
+    def receive_fullraw(self, eot_time: float, timeout: float) -> tuple[int, bytearray]:
         inbuff = b""
         start = time.time()
         last_rx = start
@@ -357,11 +377,6 @@ class OptolinkVS2Protocol:
         firstbyte = 1
         lastbyte = telegram[1] + 1
         return sum(telegram[firstbyte : lastbyte + 1]) % 0x100
-
-    def _return(self, code, addr, data, msgid, msqn, fctcd, dlen, raw):
-        if self.mqtt_publ_callback:
-            self.mqtt_publ_callback(code, addr, data, msgid, msqn, fctcd, dlen)
-        return code, addr, data if not raw else bytearray(data)
 
     @staticmethod
     def readable_hex(data: bytes) -> str:
