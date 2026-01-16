@@ -36,10 +36,10 @@ COPY --from=builder /build/deps ./deps/
 COPY src/optolink2mqtt/*.py ./src/
 
 # copy the version file produced by hatch-vcs plugin from the builder stage:
-COPY --from=builder /build/src/optolink2mqtt/_optolink2mqtt_version.py ./src/optolink2mqtt/
+COPY --from=builder /build/src/optolink2mqtt/_optolink2mqtt_version.py ./src/
 
 RUN mkdir ./conf ./schema
-#COPY src/optolink2mqtt/schema/* ./schema/
+COPY src/optolink2mqtt/schema/* ./schema/
 
 # do not copy the default configuration file: it's better to error out loudly
 # if the user fails to bind-mount his own config file, rather than using a default config file.
@@ -56,6 +56,10 @@ RUN if [[ "$USERNAME" != "root" ]]; then \
 
 # process run as optolink2mqtt user
 USER ${USERNAME}
+
+# set conf path
+ENV OPTOLINK2MQTT_CONFIG="/etc/optolink2mqtt/optolink2mqtt.yaml"
+ENV OPTOLINK2MQTT_CONFIGSCHEMA="/opt/optolink2mqtt/schema/optolink2mqtt.schema.yaml"
 
 # add deps to PYTHONPATH
 ENV PYTHONPATH="/opt/optolink2mqtt/src:/opt/optolink2mqtt/deps"
