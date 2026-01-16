@@ -34,10 +34,12 @@ optolink2mqtt --help
 
 ### Docker
 
-Just use:
+When using Docker you will need to provide the YAML config file path in the `docker run` command and 
+also provide the name of the serial port (e.g. `/dev/ttyUSB0` in the following example):
 
 ```sh
 docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
+    --device=/dev/ttyUSB0 \
     --hostname $(hostname) \
     --name optolink2mqtt \
     ghcr.io/f18m/optolink2mqtt:latest
