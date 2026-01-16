@@ -126,6 +126,22 @@ registers_poll_list:
       platform: sensor
       device_class: enum
 
+
+  # another register example, showing a binary_sensor of type "running":
+
+  - name: heating_circuit_pump
+    sampling_period_seconds: 20
+    register: 0x0484
+    length: 1
+    scale_factor: 1
+    signed: false
+    ha_discovery:
+      name: "Heating Circuit Pump"
+      platform: binary_sensor
+      device_class: running
+      payload_on: "1"
+      payload_off: "0"
+
   # PLEASE NOTE THAT DISCOVERING THE CORRECT REGISTERS TO POLL IS
   # SOMETHING YOU NEED TO DO BY YOURSELF, AS IT DEPENDS ON THE
   # MODEL OF YOUR VIESSMANN DEVICE AND ITS CONFIGURATION.
