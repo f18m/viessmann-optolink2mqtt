@@ -1,5 +1,5 @@
-![GitHub Tag](https://img.shields.io/github/v/tag/f18m/viessmann-optolink2mqtt)
-![PyPI - Version](https://img.shields.io/pypi/v/viessmann-optolink2mqtt)
+[![GitHub Tag](https://img.shields.io/github/v/tag/f18m/viessmann-optolink2mqtt)](https://github.com/f18m/viessmann-optolink2mqtt/releases)
+[![PyPI - Version](https://img.shields.io/pypi/v/viessmann-optolink2mqtt)](https://pypi.org/project/viessmann-optolink2mqtt/)
 
 # viessmann-optolink2mqtt
 
