@@ -247,6 +247,13 @@ class Config:
         # add default values for optional configuration parameters, if they're missing:
         self._fill_defaults_logging()
         self._fill_defaults_mqtt()
+
+        # add default values for optional configuration parameters in registers_poll_list
+        validated_registers = []
+        for reg in self.config["registers_poll_list"]:
+            validated_registers.append(self._fill_defaults_register(reg))
+        self.config["registers_poll_list"] = validated_registers
+
         logging.info(
             f"Configuration file '{filename}' successfully loaded and validated against schema. It contains {len(self.config['registers_poll_list'])} registers to sample/poll."
         )
@@ -302,6 +309,17 @@ class Config:
 
         # enhance the original config with the one containing all settings:
         self.config["mqtt"] = m
+
+    def _fill_defaults_register(self, reg: dict) -> dict:
+        if "sampling_period_sec" not in reg:
+            reg["sampling_period_sec"] = 1
+        if "scale_factor" not in reg:
+            reg["scale_factor"] = 1.0
+
+        if "ha_discovery" not in reg:
+            reg["ha_discovery"] = None
+
+        return reg
 
     def apply_logging_config(self):
         # Apply logging config

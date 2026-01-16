@@ -65,9 +65,10 @@ registers_poll_list:
     sampling_period_seconds: 10
 
     # each register of the Viessmann device has a few key attributes you need to know/discover:
-    # the address, its length (in bytes) and whether the number contained is signed or not
+    # the address, its length (in bytes), its scale factor and whether the number contained is signed or not
     register: 0x0101
     length: 2
+    scale_factor: 0.1
     signed: false
 
     # the whole "ha_discovery" section is optional and is useful only if you have

@@ -2,7 +2,8 @@
 optolinkvs2_register.py
 ----------------
 Definition of OptolinkVS2Register class
-Copyright 2026 Francesco Montorsi
+Copyright 2026 Francesco Montorsi (object-oriented rewrite)
+Copyright 2024 philippoo66 (get_value)
 
 Licensed under the GNU GENERAL PUBLIC LICENSE, Version 3 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,6 +26,8 @@ class OptolinkVS2Register:
     A register to be read or written inside the Viessmann device, via the Optolink interface
     """
 
+    MAX_DECIMALS = 2
+
     def __init__(
         self,
         name: str = "external_temperature",
@@ -32,6 +35,7 @@ class OptolinkVS2Register:
         address: int = 0x0101,
         length: int = 2,
         signed: bool = False,
+        scale_factor: float = 1.0,
         mqtt_base_topic: str = "",
         ha_discovery: Optional[Dict[str, Any]] = None,
     ):
@@ -46,35 +50,40 @@ class OptolinkVS2Register:
         self.address = address
         self.length = length
         self.signed = signed
+        self.scale_factor = scale_factor
 
         # optional Home Assistant discovery configuration
         self.ha_discovery = ha_discovery
 
+    def get_human_readable_description(self) -> str:
+        """
+        Returns a human-readable description for this register
+        """
+        return f"name=[{self.name}], addr=0x{self.address:04X}, len={self.length}, signed={self.signed}, scale={self.scale_factor}"
+
     def get_next_occurrence_in_seconds(self) -> float:
+        """
+        Returns the sampling period in seconds
+        """
         return self.sampling_period_sec
+
+    def get_value(self, rawdata: bytearray):
+        """
+        Returns the value of the register from the given raw data.
+        This function was named "bytesval" in original optolink-splitter codebase
+        """
+        val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
+        if self.scale_factor != 1.0:
+            val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
+        return val
+
+    #
+    # MQTT helpers
+    #
 
     def get_mqtt_topic(self) -> str:
         sanitized_name = self.name.strip().replace(" ", "_").lower()
         return f"{self.mqtt_base_topic}/{sanitized_name}"
 
     def get_mqtt_payload(self, rawdata: bytearray) -> str:
-        if self.length == 1:
-            if self.signed:
-                value = int.from_bytes(rawdata, byteorder="big", signed=True)
-            else:
-                value = int.from_bytes(rawdata, byteorder="big", signed=False)
-        elif self.length == 2:
-            if self.signed:
-                value = int.from_bytes(rawdata, byteorder="big", signed=True)
-            else:
-                value = int.from_bytes(rawdata, byteorder="big", signed=False)
-        elif self.length == 4:
-            if self.signed:
-                value = int.from_bytes(rawdata, byteorder="big", signed=True)
-            else:
-                value = int.from_bytes(rawdata, byteorder="big", signed=False)
-        else:
-            # for other lengths, just return the hex representation
-            value = rawdata.hex()
-
-        return str(value)
+        return f"{self.get_value(rawdata)}"
