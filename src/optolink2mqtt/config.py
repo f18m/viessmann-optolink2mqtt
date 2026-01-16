@@ -23,10 +23,9 @@ import yaml
 import yamale
 from yamale import YamaleError
 from platformdirs import PlatformDirs
-
 import socket
 
-# from .ha_units import HomeAssistantMeasurementUnits
+from .ha_units import HomeAssistantMeasurementUnits
 
 
 class Config:
@@ -264,6 +263,8 @@ class Config:
             self.config["logging"] = {"level": "ERROR"}
         if "level" not in self.config["logging"]:
             self.config["logging"]["level"] = "ERROR"
+        if "report_status_period_sec" not in self.config["logging"]:
+            self.config["logging"]["report_status_period_sec"] = 600
 
     def _fill_defaults_mqtt(self):
         m = self.config["mqtt"]
@@ -317,7 +318,83 @@ class Config:
             reg["scale_factor"] = 1.0
 
         if "ha_discovery" not in reg:
+            # HA discovery disabled for this task:
             reg["ha_discovery"] = None
+        else:
+            h = reg["ha_discovery"]
+
+            # name is required and shall be non-empty
+            if "name" not in h:
+                raise ValueError(
+                    f"{reg['name']}: Invalid 'ha_discovery.name' attribute in configuration file: missing"
+                )
+            if h["name"] == "":
+                raise ValueError(
+                    f"{reg['name']}: Invalid 'ha_discovery.name' attribute in configuration file: empty"
+                )
+
+            # optional parameters with defaults:
+
+            if "platform" not in h:
+                # most of psutil/pySMART tasks are sensors, so "sensor" is a good default:
+                h["platform"] = "sensor"
+            elif h["platform"] not in Config.HA_SUPPORTED_PLATFORMS:
+                raise ValueError(
+                    f"{reg['name']}: Invalid 'ha_discovery.platform' attribute in configuration file: {h['platform']}. Expected one of {Config.HA_SUPPORTED_PLATFORMS}"
+                )
+            if "device_class" not in h:
+                h["device_class"] = None
+            elif (
+                h["device_class"]
+                not in Config.HA_SUPPORTED_DEVICE_CLASSES[h["platform"]]
+            ):
+                raise ValueError(
+                    f"{reg['name']}: Invalid 'ha_discovery.device_class' attribute in configuration file: {h['device_class']}. Expected one of {Config.HA_SUPPORTED_DEVICE_CLASSES}"
+                )
+
+            if (
+                "unit_of_measurement" in h
+                and h["unit_of_measurement"]
+                not in HomeAssistantMeasurementUnits.get_all_constants()
+            ):
+                raise ValueError(
+                    f"{reg['name']}: Invalid 'ha_discovery.unit_of_measurement' attribute in configuration file: {h['unit_of_measurement']}. Expected one of {HomeAssistantMeasurementUnits.get_all_constants()}"
+                )
+
+            if "state_class" not in h:
+                # "measurement" is a good default since most of psutil/pySMART tasks represent measurements
+                # of bytes, percentages, temperatures, etc.
+                # We just make sure to never add "state_class" to some types of "device_class"es that will
+                # trigger errors on the HomeAssistant side...
+                if (
+                    h["device_class"]
+                    not in Config.HA_UNSUPPORTED_DEVICE_CLASSES_FOR_MEASUREMENTS
+                ):
+                    h["state_class"] = "measurement"
+            elif (
+                "state_class" in h
+                and h["state_class"] not in Config.HA_SUPPORTED_STATE_CLASSES
+            ):
+                raise ValueError(
+                    f"{reg['name']}: Invalid 'ha_discovery.state_class' attribute in configuration file: {h['state_class']}. Expected one of {Config.HA_SUPPORTED_STATE_CLASSES}"
+                )
+
+            # optional parameters without defaults:
+
+            optional_params = [
+                "unit_of_measurement",
+                "icon",
+                "expire_after",
+                "payload_on",
+                "payload_off",
+                "value_template",
+            ]
+            for o in optional_params:
+                if o not in h:
+                    # create the key but set its value to None
+                    h[o] = None
+
+            reg["ha_discovery"] = h
 
         return reg
 

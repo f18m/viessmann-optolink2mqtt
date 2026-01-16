@@ -20,6 +20,9 @@ limitations under the License.
 
 from typing import Optional, Dict, Any
 
+# import hashlib
+import json
+
 
 class OptolinkVS2Register:
     """
@@ -41,6 +44,7 @@ class OptolinkVS2Register:
     ):
         # basic metadata
         self.name = name
+        self.sanitized_name = self.name.strip().replace(" ", "_").lower()
         self.sampling_period_sec = sampling_period_sec
         self.mqtt_base_topic = mqtt_base_topic
         if self.mqtt_base_topic.endswith("/"):
@@ -82,8 +86,89 @@ class OptolinkVS2Register:
     #
 
     def get_mqtt_topic(self) -> str:
-        sanitized_name = self.name.strip().replace(" ", "_").lower()
-        return f"{self.mqtt_base_topic}/{sanitized_name}"
+        return f"{self.mqtt_base_topic}/{self.sanitized_name}"
 
     def get_mqtt_payload(self, rawdata: bytearray) -> str:
         return f"{self.get_value(rawdata)}"
+
+    #
+    # MQTT/HomeAssistant Discovery Message helpers
+    #
+
+    def get_ha_unique_id(self, device_name: str) -> str:
+        """
+        Returns a reasonable-unique ID to be used inside HA discovery messages
+        """
+
+        # concatenated = "".join([,])
+        # hash_object = hashlib.sha256(concatenated.encode())
+        # hash_hex = hash_object.hexdigest()
+        # return f"{device_name}-{self.task_name}-{hash_hex[:12]}"
+        sanitized_address = self.address.to_bytes(2, "little").hex()
+        return f"{device_name}-{self.sanitized_name}-{sanitized_address}"
+
+    def get_ha_discovery_payload(
+        self,
+        device_name: str,
+        optolink2mqtt_ver: str,
+        device_dict: Dict[str, str],
+        default_expire_after: int,
+    ) -> str:
+        """
+        Returns an HomeAssistant MQTT discovery message associated with this task.
+        This method is only available for single-valued tasks, having their "ha_discovery" metadata
+        populated in the configuration file.
+        See https://www.home-assistant.io/integrations/mqtt/#discovery-messages
+        """
+        if self.ha_discovery is None:
+            return None
+
+        # required parameters
+        if self.ha_discovery["name"] is None or self.ha_discovery["name"] == "":
+            raise Exception(
+                f"Register '{self.name}' has invalid HA discovery 'name' property."
+            )
+
+        msg = {
+            "device": device_dict,
+            "origin": {
+                "name": "optolink2mqtt",
+                "sw": optolink2mqtt_ver,
+                "url": "https://github.com/f18m/viessmann-optolink2mqtt",
+            },
+            "unique_id": self.get_ha_unique_id(device_name),
+            "state_topic": self.get_mqtt_topic(),
+            "name": self.ha_discovery["name"],
+        }
+
+        # optional parameters
+        # FIXME: should we add also "availability_topic", "payload_available", "payload_not_available" ?
+        optional_parameters = [
+            "icon",
+            "device_class",
+            "state_class",
+            "unit_of_measurement",
+            "payload_on",
+            "payload_off",
+        ]
+        for o in optional_parameters:
+            if o in self.ha_discovery and self.ha_discovery[o]:
+                msg[o] = self.ha_discovery[o]
+
+        # expire_after is populated with user preference or a meaningful default value:
+        if self.ha_discovery["expire_after"]:
+            msg["expire_after"] = self.ha_discovery["expire_after"]
+        elif default_expire_after:
+            msg["expire_after"] = default_expire_after
+
+        return json.dumps(msg)
+
+    def get_ha_discovery_topic(self, ha_topic: str, device_name: str) -> str:
+        """
+        Returns the TOPIC associated with the PAYLOAD returned by get_ha_discovery_payload()
+        """
+        # the topic shall be in format
+        #   <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
+        # see https://www.home-assistant.io/integrations/mqtt/#discovery-topic
+        unique_id = self.get_ha_unique_id(device_name)
+        return f"{ha_topic}/{self.ha_discovery['platform']}/{device_name}/{unique_id}/config"

@@ -19,15 +19,12 @@ limitations under the License.
 
 import argparse
 import os
-
 import sched
 import socket
 import logging
 import sys
-
-# import platform
+import platform
 import time
-
 import serial
 
 from .config import Config
@@ -80,33 +77,38 @@ class Optolink2MqttApp:
         )
         return
 
-    # @staticmethod
-    # def log_status() -> None:
-    #     logging.info(f"optolink2mqtt status: {Task.num_success} successful tasks; {Task.num_errors} failed tasks; {MqttClient.num_disconnects} MQTT disconnections; {MqttClient.num_published_successful}/{MqttClient.num_published_total} successful/total MQTT messages published")
+    @staticmethod
+    def log_status() -> None:
+        # TODO: add stats from VS2 interface
+        logging.info(
+            f"optolink2mqtt status: {MqttClient.num_disconnects} MQTT disconnections; {MqttClient.num_published_successful}/{MqttClient.num_published_total} successful/total MQTT messages published"
+        )
 
-    # @staticmethod
-    # def on_log_timer(app: 'optolink2mqttApp') -> None:
-    #     '''
-    #     Periodically prints the status of optolink2mqtt
-    #     '''
+    @staticmethod
+    def on_log_timer(app: "Optolink2MqttApp") -> None:
+        """
+        Periodically prints the status of optolink2mqtt
+        """
 
-    #     new_status = (Task.num_errors, Task.num_success, MqttClient.num_disconnects)
-    #     if new_status != app.last_logged_status:
-    #         # publish status on MQTT
-    #         status_topic = app.mqtt_client.get_optolink2mqtt_status_topic()
-    #         app.mqtt_client.publish(status_topic + "/num_tasks_errors", Task.num_errors)
-    #         app.mqtt_client.publish(status_topic + "/num_tasks_success", Task.num_success)
-    #         app.mqtt_client.publish(status_topic + "/num_mqtt_disconnects", MqttClient.num_disconnects)
+        new_status = MqttClient.num_disconnects
+        if new_status != app.last_logged_status:
+            # publish status on MQTT
+            status_topic = app.mqtt_client.get_optolink2mqtt_status_topic()
+            app.mqtt_client.publish(
+                status_topic + "/num_mqtt_disconnects", MqttClient.num_disconnects
+            )
 
-    #         # publish status on log
-    #         Optolink2MqttApp.log_status()
+            # publish status on log
+            Optolink2MqttApp.log_status()
 
-    #         app.last_logged_status = new_status
+            app.last_logged_status = new_status
 
-    #     # add next timer task
-    #     log_period_sec = int(app.config.config["logging"]["report_status_period_sec"])
-    #     app.scheduler.enter(log_period_sec, 1, optolink2mqttApp.on_log_timer, tuple([app]))
-    #     return
+        # add next timer task
+        log_period_sec = int(app.config.config["logging"]["report_status_period_sec"])
+        app.scheduler.enter(
+            log_period_sec, 1, Optolink2MqttApp.on_log_timer, tuple([app])
+        )
+        return
 
     @staticmethod
     def get_embedded_version() -> str:
@@ -122,52 +124,54 @@ class Optolink2MqttApp:
 
         return __version__
 
-    # def publish_ha_discovery_messages(self) -> int:
-    #     '''
-    #     Publish MQTT discovery messages for HomeAssistant, from all tasks that have been decorated
-    #     with the "ha_discovery" metadata.
-    #     Returns the number of MQTT discovery messages published.
-    #     '''
+    def publish_ha_discovery_messages(self) -> int:
+        """
+        Publish MQTT discovery messages for HomeAssistant, from all tasks that have been decorated
+        with the "ha_discovery" metadata.
+        Returns the number of MQTT discovery messages published.
+        """
 
-    #     ha_discovery_topic = self.config.config["mqtt"]["ha_discovery"]["topic"]
-    #     ha_device_name = self.config.config["mqtt"]["ha_discovery"]["device_name"]
-    #     optolink2mqtt_ver = optolink2mqttApp.get_embedded_version()
+        ha_discovery_topic = self.config.config["mqtt"]["ha_discovery"]["topic"]
+        ha_device_name = self.config.config["mqtt"]["ha_discovery"]["device_name"]
+        optolink2mqtt_ver = Optolink2MqttApp.get_embedded_version()
 
-    #     device_dict = {
-    #         "ids": ha_device_name,
-    #         "name": ha_device_name,
-    #         "manufacturer": "f18m/optolink2mqtt",
-    #         "sw_version": platform.system(),  # the OS name like 'Linux', 'Darwin', 'Java', 'Windows'
-    #         "hw_version": platform.machine(),  # this is actually something like "x86_64"
-    #         "model": platform.platform(terse=True),  # on Linux this is a condensed summary of "uname -a"
-    #         "configuration_url": "https://github.com/f18m/optolink2mqtt",
-    #         "connections": [["mac", get_mac_address()]],
-    #     }
-    #     num_msgs = 0
-    #     for sch in self.register_list:
+        device_dict = {
+            "ids": ha_device_name,
+            "name": ha_device_name,
+            "manufacturer": "f18m/viessmann-optolink2mqtt",
+            # FIXME: maybe we should ask in the config file for the Viessmann device model instead of
+            #        using the Linux OS platform for this sw?
+            "sw_version": platform.system(),  # the OS name like 'Linux', 'Darwin', 'Java', 'Windows'
+            "hw_version": platform.machine(),  # this is actually something like "x86_64"
+            "model": platform.platform(
+                terse=True
+            ),  # on Linux this is a condensed summary of "uname -a"
+            "configuration_url": "https://github.com/f18m/viessmann-optolink2mqtt",
+            # "connections": [["mac", get_mac_address()]],
+        }
+        num_msgs = 0
+        for reg in self.register_list:
+            # expire the sensor in HomeAssistant after a duration equal to 1.5 the usual interval;
+            # also apply a lower bound of 10sec; this is a reasonable way to avoid that a single MQTT
+            # message not delivered turns the entity into "not available" inside HomeAssistant;
+            # on the other hand, if optolink2mqtt goes down or the MQTT broker goes down, the entity at some
+            # point will be unavailable so the user will know that something is wrong.
+            expire_time_sec = max(10, reg.sampling_period_sec * 1.5)
+            payload = reg.get_ha_discovery_payload(
+                ha_device_name, optolink2mqtt_ver, device_dict, expire_time_sec
+            )
+            if payload is not None:
+                topic = reg.get_ha_discovery_topic(ha_discovery_topic, ha_device_name)
+                logging.info(
+                    f"Publishing an MQTT discovery messages on topic '{topic}'"
+                )
+                self.mqtt_client.publish(topic, payload)
+                num_msgs += 1
 
-    #         expire_time_sec = sch.get_max_interval_sec()
-    #         if expire_time_sec == -1:
-    #             # failed to compute... proceed without "expire_after"
-    #             expire_time_sec = None
-    #         else:
-    #             # expire the sensor in HomeAssistant after a duration equal to 1.5 the usual interval;
-    #             # also apply a lower bound of 10sec; this is a reasonable way to avoid that a single MQTT
-    #             # message not delivered turns the entity into "not available" inside HomeAssistant;
-    #             # on the other hand, if optolink2mqtt goes down or the MQTT broker goes down, the entity at some
-    #             # point will be unavailable so the user will know that something is wrong.
-    #             expire_time_sec = max(10,expire_time_sec * 1.5)
-
-    #         for t in sch.get_tasks():
-    #             assert isinstance(t, Task)
-    #             payload = t.get_ha_discovery_payload(ha_device_name, optolink2mqtt_ver, device_dict, expire_time_sec)
-    #             if payload is not None:
-    #                 topic = t.get_ha_discovery_topic(ha_discovery_topic, ha_device_name)
-    #                 logging.info(f"Publishing an MQTT discovery messages on topic '{topic}'")
-    #                 self.mqtt_client.publish(topic, payload)
-    #                 num_msgs += 1
-    #     logging.info(f"Published a total of {num_msgs} MQTT discovery messages under the topic prefix '{ha_discovery_topic}' for the device '{ha_device_name}'. The HomeAssistant MQTT integration should now be showing {num_msgs} sensors for the device '{ha_device_name}'.")
-    #     return num_msgs
+        logging.info(
+            f"Published a total of {num_msgs} MQTT discovery messages under the topic prefix '{ha_discovery_topic}' for the device '{ha_device_name}'. The HomeAssistant MQTT integration should now be showing {num_msgs} sensors for the device '{ha_device_name}'."
+        )
+        return num_msgs
 
     def run_all_tasks(self) -> int:
         """
@@ -326,17 +330,16 @@ class Optolink2MqttApp:
             # store the Schedule also locally:
             self.register_list.append(register_instance)
 
-        # # add periodic log
-        # try:
-        #     log_period_sec = int(self.config.config["logging"]["report_status_period_sec"])
-        # except ValueError:
-        #     logging.error("Invalid expression for logging.report_status_every. Please fix the syntax in the configuration file. Aborting.")
-        #     return 5
-
-        # if log_period_sec > 0:
-        #     logging.info(f"optolink2mqtt status will be published on topic {self.mqtt_client.get_optolink2mqtt_status_topic()} every {log_period_sec}sec")
-        #     self.scheduler.enter(log_period_sec, 1, optolink2mqttApp.on_log_timer, tuple([self]))
-        # #else: logging of the status has been disabled
+        # add periodic log
+        log_period_sec = int(self.config.config["logging"]["report_status_period_sec"])
+        if log_period_sec > 0:
+            logging.info(
+                f"optolink2mqtt status will be published on topic {self.mqtt_client.get_optolink2mqtt_status_topic()} every {log_period_sec}sec"
+            )
+            self.scheduler.enter(
+                log_period_sec, 1, Optolink2MqttApp.on_log_timer, tuple([self])
+            )
+        # else: logging of the status has been disabled
 
         # success
         return 0
@@ -345,7 +348,7 @@ class Optolink2MqttApp:
         """
         Runs the logic of optolink2mqtt application.
         Every "sleep quantum" the app wakes up and checks whether
-        * it's time to run a scheduled task
+        * it's time to read a register
         * MQTT dicovery messages were requested
         * etc
 
@@ -388,10 +391,11 @@ class Optolink2MqttApp:
                         )
                         self.publish_ha_discovery_messages()
 
-                        logging.warning(
-                            "Detected notification that Home Assistant just (re)started; phase 2: publishing all sensor values (regardless of their schedule)..."
-                        )
-                        self.run_all_tasks()
+                        # TODO
+                        # logging.warning(
+                        #    "Detected notification that Home Assistant just (re)started; phase 2: publishing all sensor values (regardless of their schedule)..."
+                        # )
+                        # self.read_all_registers()
 
     def run(self) -> int:
         # estabilish a connection to the MQTT broker
@@ -434,8 +438,8 @@ class Optolink2MqttApp:
         # gracefully stop the event loop of MQTT client
         self.mqtt_client.loop_stop()
 
-        # # log status one last time
-        # Optolink2MqttApp.log_status()
+        # log status one last time
+        Optolink2MqttApp.log_status()
 
         logging.warning("Exiting gracefully")
 

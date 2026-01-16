@@ -59,6 +59,17 @@ Please look at the [optolink2mqtt.yaml](./optolink2mqtt.yaml) file as reference 
 TO BE WRITTEN
 
 
+## HomeAssistant Integration
+
+This project allows a very easy integration with [HomeAssistant](https://www.home-assistant.io/).
+It's enough to populae the `ha_discovery` section of each register defined in the [configuration file](./optolink2mqtt.yaml)
+with some metadata specific for each sensor, to get the sensor automatically appear inside your HomeAssistant:
+
+<img title="HA integration" alt="HA integration" src="docs/home_assistant_mqtt_device.png">
+
+
+
+
 ## Related projects
 
 * [Optolink Splitter](https://github.com/philippoo66/optolink-splitter): this is the original project that inspired this one
