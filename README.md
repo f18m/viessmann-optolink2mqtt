@@ -3,8 +3,29 @@
 
 # viessmann-optolink2mqtt
 
-Open source interface between a Viessmann device (heat pump, gas heater, etc) and 
+This project provides an open source interface between a [Viessmann](https://en.wikipedia.org/wiki/Viessmann) device (heat pump, gas heater, etc) and 
 [MQTT](https://en.wikipedia.org/wiki/MQTT).
+
+> [!IMPORTANT]
+> This project is an independent work and is not associated with, sponsored by, or connected to the Viessmann company in any manner. Viessmann and all related trademarks, product names, and device names are trademarks or registered trademarks of Viessmann and remain the exclusive property of Viessmann.
+
+
+## What is Optolink?
+
+Some Viessmann devices (at least those manufactured before roughly year 2014) expose an optical interface
+for communication with external devices named "_Optolink_".
+
+This interface is typically located in the Vitotronic panel and officially supports a connection to the
+[VitoConnect](https://www.viessmann.co.uk/en/products/control-system-and-connectivity/vitoconnect.html)
+device.
+On the other hand such interface also allows tinkerers to read and write registers of the Viessmann devices
+to e.g. read telemetry data (temperatures, status of internal parts, etc) and write settings
+(e.g. heating mode, target temperatures, etc).
+
+This project allows you to take control of your Viessmann device by hooking into the Optolink interface
+and sending all data to a local MQTT server, so that all your data is local and is never transiting 
+the cloud of any vendor.
+
 
 ## Architecture
 
@@ -42,10 +63,14 @@ docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
     --device=/dev/ttyUSB0 \
     --hostname $(hostname) \
     --name optolink2mqtt \
+    --restart=unless-stopped \
     ghcr.io/f18m/optolink2mqtt:latest
 
 docker logs -f optolink2mqtt
 ```
+
+Please note that the `--restart=unless-stopped` makes sure that the optolink2mqtt will 
+be restarted after a reboot.
 
 The docker image of optolink2mqtt supports 3 main architectures: `amd64`, `armv7` and `arm64`.
 
@@ -68,6 +93,11 @@ It's enough to populae the `ha_discovery` section of each register defined in th
 with some metadata specific for each sensor, to get the sensor automatically appear inside your HomeAssistant:
 
 <img title="HA integration" alt="HA integration" src="docs/home_assistant_mqtt_device.png">
+
+This makes it possible to build in your HomeAssistant dashboard visual representation of your Viessmann device.
+E.g.. for my heat pump I was able to build the following dashboard:
+
+<img title="HA dashboard" alt="HA dashboard" src="docs/home_assistant_dashboard1.png">
 
 
 ## Related projects
