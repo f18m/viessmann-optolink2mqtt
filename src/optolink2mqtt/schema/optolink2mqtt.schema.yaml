@@ -41,6 +41,7 @@ register_def:
   register: int()
   length: int()
   signed: bool()
+  enum: map(str,str,required=False)
   scale_factor: num(required=False)
   ha_discovery: include('pollitem_ha_discovery',required=False)
 ---
@@ -55,4 +56,3 @@ pollitem_ha_discovery:
   payload_off: str(required=False)
   value_template: str(required=False)
   state_class: str(required=False)
-  options: map(str,str,required=False)

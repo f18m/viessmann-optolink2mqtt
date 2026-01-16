@@ -90,7 +90,7 @@ registers_poll_list:
       unit_of_measurement: "°C"          # for a list of supported measurement units check https://github.com/f18m/viessmann-optolink2mqtt/blob/main/src/optolink2mqtt/ha_units.py
 
 
-  # another register example:
+  # another register example, showing a different measurement unit:
 
   - name: dhw_electric_energy_kwh
     sampling_period_seconds: 600
@@ -105,6 +105,27 @@ registers_poll_list:
       unit_of_measurement: "kWh"
 
   
+  # another register example, showing an enumerated value:
+
+  - name: heating_circuit_1_mode
+    sampling_period_seconds: 20
+    register: 0xB000
+    length: 1
+    scale_factor: 1
+    signed: false
+    enum:
+      0: "Off"
+      1: "DHW only"
+      2: "Heating/Cooling/DHW (time program)"
+      4: "Permanently reduced"
+      5: "Permanently normal"
+      6: "Normal/Off (time program)"
+      7: "Cooling only"
+    ha_discovery:
+      name: "Heating Circuit 1 Mode"
+      platform: sensor
+      device_class: enum
+
   # PLEASE NOTE THAT DISCOVERING THE CORRECT REGISTERS TO POLL IS
   # SOMETHING YOU NEED TO DO BY YOURSELF, AS IT DEPENDS ON THE
   # MODEL OF YOUR VIESSMANN DEVICE AND ITS CONFIGURATION.

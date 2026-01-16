@@ -39,6 +39,7 @@ class OptolinkVS2Register:
         length: int = 2,
         signed: bool = False,
         scale_factor: float = 1.0,
+        enum_dict: Optional[Dict[int, str]] = None,
         mqtt_base_topic: str = "",
         ha_discovery: Optional[Dict[str, Any]] = None,
     ):
@@ -55,6 +56,7 @@ class OptolinkVS2Register:
         self.length = length
         self.signed = signed
         self.scale_factor = scale_factor
+        self.enum_dict = enum_dict
 
         # optional Home Assistant discovery configuration
         self.ha_discovery = ha_discovery
@@ -71,14 +73,19 @@ class OptolinkVS2Register:
         """
         return self.sampling_period_sec
 
-    def get_value(self, rawdata: bytearray):
+    def get_value(self, rawdata: bytearray) -> Any:
         """
         Returns the value of the register from the given raw data.
         This function was named "bytesval" in original optolink-splitter codebase
         """
-        val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
-        if self.scale_factor != 1.0:
-            val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
+
+        if self.enum_dict is not None:
+            val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
+            return self.enum_dict.get(val, f"Unknown ({val})")
+        else:
+            val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
+            if self.scale_factor != 1.0:
+                val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
         return val
 
     #
@@ -154,6 +161,9 @@ class OptolinkVS2Register:
         for o in optional_parameters:
             if o in self.ha_discovery and self.ha_discovery[o]:
                 msg[o] = self.ha_discovery[o]
+
+        if self.enum_dict is not None:
+            msg["options"] = list(self.enum_dict.values())
 
         # expire_after is populated with user preference or a meaningful default value:
         if self.ha_discovery["expire_after"]:
