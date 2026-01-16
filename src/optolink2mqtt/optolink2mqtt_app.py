@@ -260,9 +260,10 @@ class Optolink2MqttApp:
         #
         # create OptolinkVS2Protocol interface
         #
+        serial_port_name = self.config.config["optolink"]["serial_port"]
         try:
             ser = serial.Serial(
-                self.config.config["optolink"]["serial_port"],
+                serial_port_name,
                 baudrate=4800,
                 bytesize=8,
                 parity="E",
@@ -271,7 +272,7 @@ class Optolink2MqttApp:
                 exclusive=True,
             )
         except serial.SerialException as e:
-            logging.error(f"Cannot open serial port {ser.name}: {e}. Aborting.")
+            logging.error(f"Cannot open serial port {serial_port_name}: {e}. Aborting.")
             return 1
 
         self.optolink_interface = OptolinkVS2Protocol(
