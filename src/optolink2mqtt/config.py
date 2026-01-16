@@ -316,6 +316,8 @@ class Config:
             reg["sampling_period_sec"] = 1
         if "scale_factor" not in reg:
             reg["scale_factor"] = 1.0
+        if "byte_filter" not in reg:
+            reg["byte_filter"] = None
         if "enum" not in reg:
             reg["enum"] = None
 

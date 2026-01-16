@@ -304,6 +304,7 @@ class Optolink2MqttApp:
                     reg["length"],
                     reg["signed"],
                     reg["scale_factor"],
+                    reg["byte_filter"],
                     reg["enum"],
                     self.config.config["mqtt"]["publish_topic_prefix"],
                     reg["ha_discovery"],

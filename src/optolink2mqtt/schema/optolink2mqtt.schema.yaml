@@ -41,6 +41,7 @@ register_def:
   register: int()
   length: int()
   signed: bool()
+  byte_filter: str(required=False)
   enum: map(str,str,required=False)
   scale_factor: num(required=False)
   ha_discovery: include('pollitem_ha_discovery',required=False)

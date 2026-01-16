@@ -39,6 +39,7 @@ class OptolinkVS2Register:
         length: int = 2,
         signed: bool = False,
         scale_factor: float = 1.0,
+        byte_filter: str = None,
         enum_dict: Optional[Dict[int, str]] = None,
         mqtt_base_topic: str = "",
         ha_discovery: Optional[Dict[str, Any]] = None,
@@ -56,6 +57,7 @@ class OptolinkVS2Register:
         self.length = length
         self.signed = signed
         self.scale_factor = scale_factor
+        self.byte_filter = byte_filter
         self.enum_dict = enum_dict
 
         # optional Home Assistant discovery configuration
@@ -65,7 +67,7 @@ class OptolinkVS2Register:
         """
         Returns a human-readable description for this register
         """
-        return f"name=[{self.name}], addr=0x{self.address:04X}, len={self.length}, signed={self.signed}, scale={self.scale_factor}"
+        return f"name=[{self.name}], addr=0x{self.address:04X}, len={self.length}, signed={self.signed}, scale={self.scale_factor}, byte_filter={self.byte_filter}, enum={self.enum_dict}"
 
     def get_next_occurrence_in_seconds(self) -> float:
         """
@@ -83,6 +85,14 @@ class OptolinkVS2Register:
             val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
             return self.enum_dict.get(val, f"Unknown ({val})")
         else:
+            if self.byte_filter is not None:
+                # apply byte filter
+                parts = self.byte_filter.split(":")
+                if parts[0] == "b" and len(parts) == 3:
+                    start = int(parts[1])
+                    end = int(parts[2]) + 1  # inclusive
+                    rawdata = rawdata[start:end]
+
             val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
             if self.scale_factor != 1.0:
                 val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
