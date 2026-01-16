@@ -43,6 +43,8 @@ docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
     ghcr.io/f18m/optolink2mqtt:latest
 ```
 
+The docker image of optolink2mqtt supports 3 main architectures: `amd64`, `armv7` and `arm64`.
+
 
 ## Configuration file
 
