@@ -4,7 +4,17 @@
 #
 
 logging:
+  # logging.level: defines the logging level; it can be one of the following:
+  #  - DEBUG
+  #  - INFO
+  #  - WARNING
+  #  - ERROR
+  #  - CRITICAL
   level: DEBUG
+
+  # optolink2mqtt will report its own status (e.g. number of errors) every N seconds on its log output
+  # and on the specific '<mqtt.publish_topic_prefix>/status' topic
+  report_status_period_sec: 600
 
 optolink:
   serial_port: '/dev/ttyUSB0'     # Serial port for Optolink device (mandatory, default: '/dev/ttyUSB0')
@@ -55,7 +65,7 @@ mqtt:
 
     # ha_discovery.device_name: the name of the device grouping all sensors published to HomeAssistant;
     # it defaults to the <hostname> of the computer
-    #device_name: 
+    device_name: "Vitocal"  # or Vitodens, etc
 
 # this is the core of config, defininig which registers should be read by optolink2mqtt, how frequently and
 # how they should be published to MQTT
@@ -75,6 +85,27 @@ registers_poll_list:
     # mqtt.ha_discovery.enabled set to "true" and you use HomeAssistant.
     ha_discovery:
       name: "External Temperature"
+      platform: sensor                   # this can be "sensor", "binary_sensor"
+      device_class: temperature          # see https://www.home-assistant.io/integrations/sensor.mqtt/#device-class
+      unit_of_measurement: "°C"          # for a list of supported measurement units check https://github.com/f18m/viessmann-optolink2mqtt/blob/main/src/optolink2mqtt/ha_units.py
+
+
+  # another register example:
+
+  - name: dhw_electric_energy_kwh
+    sampling_period_seconds: 600
+    register: 0x1670
+    length: 4
+    scale_factor: 0.1
+    signed: false
+    ha_discovery:
+      name: "Domestic Hot Water Electric Energy kWh"
       platform: sensor
-      device_class: temperature
-      unit_of_measurement: "C"
+      device_class: energy
+      unit_of_measurement: "kWh"
+
+  
+  # PLEASE NOTE THAT DISCOVERING THE CORRECT REGISTERS TO POLL IS
+  # SOMETHING YOU NEED TO DO BY YOURSELF, AS IT DEPENDS ON THE
+  # MODEL OF YOUR VIESSMANN DEVICE AND ITS CONFIGURATION.
+  # Check the README of this project for some hints on that.

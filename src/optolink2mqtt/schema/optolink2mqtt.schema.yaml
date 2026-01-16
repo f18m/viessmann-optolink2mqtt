@@ -8,6 +8,7 @@ registers_poll_list: list(include('register_def'))
 ---
 logging:
   level: str(required=False)
+  report_status_period_sec: int(required=False)
 ---
 optolink:
   serial_port: str()

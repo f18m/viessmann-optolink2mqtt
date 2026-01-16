@@ -320,20 +320,30 @@ class OptolinkVS2Protocol:
                     # msqn = (inbuff[3] & 0xE0) >> 5
                     # fctcd = inbuff[3] & 0x1F
                     addr = (inbuff[4] << 8) + inbuff[5]
-                    # dlen = inbuff[6]
+                    dlen = inbuff[6]
                     retdata = inbuff[7 : pllen + 2]
 
-                    if inbuff[-1] != self.calc_crc(inbuff):
-                        logging.error("VS2 CRC Error")
+                    expected_crc = self.calc_crc(inbuff)
+                    if inbuff[-1] != expected_crc:
+                        logging.error(
+                            f"VS2 CRC Error: expected=0x{expected_crc:02X} received=0x{inbuff[-1]:02X}"
+                        )
                         return OptolinkVS2RxData(
                             0xFE, addr, retdata if not raw else bytearray(alldata)
                         )
 
                     if inbuff[2] & 0x0F == 0x03:
+                        logging.error(
+                            f"VS2 Error: dlen={dlen} content[hex]={retdata.hex()}"
+                        )
                         return OptolinkVS2RxData(
                             0x03, addr, retdata if not raw else bytearray(alldata)
                         )
 
+                    # successful receive!
+                    logging.debug(
+                        f"VS2 received successfully: address=0x{addr:02X} length={dlen} content[hex]={retdata.hex()}"
+                    )
                     return OptolinkVS2RxData(
                         0x01, addr, retdata if not raw else bytearray(alldata)
                     )
