@@ -10,8 +10,7 @@ logging:
   level: str(required=False)
 ---
 optolink:
-  port: str()
-  timeout_seconds: int(required=False)
+  serial_port: str()
   show_received_bytes: bool(required=False)
 ---
 mqtt:

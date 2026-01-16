@@ -1,7 +1,7 @@
 """
 optolinkvs2_register.py
 ----------------
-
+Definition of OptolinkVS2Register class
 Copyright 2026 Francesco Montorsi
 
 Licensed under the GNU GENERAL PUBLIC LICENSE, Version 3 (the "License");
@@ -32,11 +32,15 @@ class OptolinkVS2Register:
         address: int = 0x0101,
         length: int = 2,
         signed: bool = False,
+        mqtt_base_topic: str = "",
         ha_discovery: Optional[Dict[str, Any]] = None,
     ):
         # basic metadata
         self.name = name
         self.sampling_period_sec = sampling_period_sec
+        self.mqtt_base_topic = mqtt_base_topic
+        if self.mqtt_base_topic.endswith("/"):
+            self.mqtt_base_topic = self.mqtt_base_topic[:-1]
 
         # register definition
         self.address = address
@@ -48,3 +52,29 @@ class OptolinkVS2Register:
 
     def get_next_occurrence_in_seconds(self) -> float:
         return self.sampling_period_sec
+
+    def get_mqtt_topic(self) -> str:
+        sanitized_name = self.name.strip().replace(" ", "_").lower()
+        return f"{self.mqtt_base_topic}/{sanitized_name}"
+
+    def get_mqtt_payload(self, rawdata: bytearray) -> str:
+        if self.length == 1:
+            if self.signed:
+                value = int.from_bytes(rawdata, byteorder="big", signed=True)
+            else:
+                value = int.from_bytes(rawdata, byteorder="big", signed=False)
+        elif self.length == 2:
+            if self.signed:
+                value = int.from_bytes(rawdata, byteorder="big", signed=True)
+            else:
+                value = int.from_bytes(rawdata, byteorder="big", signed=False)
+        elif self.length == 4:
+            if self.signed:
+                value = int.from_bytes(rawdata, byteorder="big", signed=True)
+            else:
+                value = int.from_bytes(rawdata, byteorder="big", signed=False)
+        else:
+            # for other lengths, just return the hex representation
+            value = rawdata.hex()
+
+        return str(value)

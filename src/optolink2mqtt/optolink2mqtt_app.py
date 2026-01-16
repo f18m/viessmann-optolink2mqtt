@@ -1,16 +1,21 @@
-# optolink2mqtt config file loader
-# Copyright (C) 2026
+"""
+optolink2mqtt_app.py
+----------------
+Optolink2Mqtt main application class
+Copyright (C) 2026 Francesco Montorsi
 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+Licensed under the GNU GENERAL PUBLIC LICENSE, Version 3 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.gnu.org/licenses/gpl-3.0.html
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
 
 import argparse
 import os
@@ -23,9 +28,12 @@ import sys
 # import platform
 import time
 
+import serial
+
 from .config import Config
 from .mqtt_client import MqttClient
 from .optolinkvs2_register import OptolinkVS2Register
+from .optolinkvs2_protocol import OptolinkVS2Protocol
 
 
 class Optolink2MqttApp:
@@ -35,6 +43,7 @@ class Optolink2MqttApp:
         self.config = None  # instance of Config
         self.mqtt_client = None  # instance of MqttClient
         self.scheduler = None  # instance of sched.scheduler
+        self.optolink_interface = None  # instance of OptolinkVS2Protocol
 
         self.last_logged_status = (None, None, None)
         self.register_list = []  # list of Schedule instances
@@ -42,12 +51,25 @@ class Optolink2MqttApp:
     @staticmethod
     def on_schedule_timer(app: "Optolink2MqttApp", reg: OptolinkVS2Register) -> None:
         """
-        Takes a register to read from the Viessmann device.
+        Callback invoked by the scheduler when it's time to read a register.
+        Please note that this is a static method, so all data must be accessed
+        through the 'app' parameter.
         """
 
         logging.debug(
             f"Optolink2MqttApp.on_schedule_timer(name={reg.name}, addr=0x{reg.address:02x})",
         )
+
+        rx_data = app.optolink_interface.read_datapoint_ext(reg.address, reg.length)
+        if rx_data.is_successful():
+            # publish on MQTT
+            app.mqtt_client.publish(
+                reg.get_mqtt_topic(), reg.get_mqtt_payload(rx_data.data)
+            )
+        else:
+            logging.error(
+                f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
+            )
 
         # add next timer task
         app.scheduler.enter(
@@ -191,11 +213,6 @@ class Optolink2MqttApp:
             print(f"Version: {Optolink2MqttApp.get_embedded_version()}")
             return -1
 
-        # fix for error 'No handlers could be found for logger "recurrent"'
-        recurrent_logger = logging.getLogger("recurrent")
-        if len(recurrent_logger.handlers) == 0:
-            recurrent_logger.addHandler(logging.NullHandler())
-
         # start with DEBUG logging level till we load the config file:
         logging.basicConfig(level=logging.DEBUG)
 
@@ -237,6 +254,32 @@ class Optolink2MqttApp:
         )
 
         #
+        # create OptolinkVS2Protocol interface
+        #
+        try:
+            ser = serial.Serial(
+                self.config.config["optolink"]["serial_port"],
+                baudrate=4800,
+                bytesize=8,
+                parity="E",
+                stopbits=2,
+                timeout=0,
+                exclusive=True,
+            )
+        except serial.SerialException as e:
+            logging.error(f"Cannot open serial port {ser.name}: {e}. Aborting.")
+            return 1
+
+        self.optolink_interface = OptolinkVS2Protocol(
+            ser,
+            None,  # serial port to forward data to a Vitoconnect
+            self.config.config["optolink"]["show_received_bytes"],
+        )
+        if not self.optolink_interface.init_vs2():
+            logging.error("Cannot initialize Optolink VS2 protocol. Aborting.")
+            return 2
+
+        #
         # parse schedule
         #
         register_list = self.config.config["registers_poll_list"]
@@ -255,6 +298,7 @@ class Optolink2MqttApp:
                     reg["register"],
                     reg["length"],
                     reg["signed"],
+                    self.config.config["mqtt"]["publish_topic_prefix"],
                     reg["ha_discovery"],
                 )
             except ValueError as e:
