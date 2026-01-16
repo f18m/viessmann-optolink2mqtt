@@ -3,7 +3,7 @@
 logging: include('logging',required=False)
 optolink: include('optolink',required=True)
 mqtt: include('mqtt',required=True)
-registers_poll_list: list(include('poll_item_def'))
+registers_poll_list: list(include('register_def'))
 
 ---
 logging:
@@ -34,12 +34,13 @@ mqtt_broker:
   username: str(required=False)
   password: str(required=False)
 ---
-poll_item_def: 
+register_def: 
   name: str()
   sampling_period_seconds: int(min=1)
   register: int()
   length: int()
   signed: bool()
+  scale_factor: num(required=False)
   ha_discovery: include('pollitem_ha_discovery',required=False)
 ---
 pollitem_ha_discovery:

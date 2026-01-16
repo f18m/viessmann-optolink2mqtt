@@ -298,12 +298,17 @@ class Optolink2MqttApp:
                     reg["register"],
                     reg["length"],
                     reg["signed"],
+                    reg["scale_factor"],
                     self.config.config["mqtt"]["publish_topic_prefix"],
                     reg["ha_discovery"],
                 )
             except ValueError as e:
                 logging.error(f"Cannot parse register definition #{i}: {e}. Aborting.")
                 return 4
+
+            logging.info(
+                f"Definition of register#{i}: {register_instance.get_human_readable_description()}"
+            )
 
             # upon startup optolink2mqtt will immediately run all scheduling rules, just
             # scattered 100ms one from each other:
