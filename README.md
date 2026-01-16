@@ -13,7 +13,7 @@ Open source interface between a Viessmann device (heat pump, gas heater, etc) an
 ## Hardware
 
 * A Single Board Computer (SBC) which is capable of running Python and has a USB-A connector
-  (if you plan to use the original Viessmann Optolink USB cable)
+  (if you plan to use the original Viessmann Optolink USB cable). A typical choice is the [Raspberry](https://www.raspberrypi.com/products/raspberry-pi-5/); myself I've been using the [OLinuXino A64](https://www.olimex.com/Products/OLinuXino/A64/A64-OLinuXino/) as (slightly cheaper) alternative.
 * The Optolink USB cable to read/write; you have two main options: a) buy the original Viessmann cable on specialized shops such as [https://www.loebbeshop.de/](https://www.loebbeshop.de/); see exact item [here](https://www.loebbeshop.de/viessmann/ersatzteil/anschlussleitung-usb-optolink-fuer-vitoconnetc-artikel-7856059/) or b) build your own cable, more details available from other tinkerers like [MyVitotronicLogger](https://github.com/Ixtalo/MyVitotronicLogger) or at [Optolink splitter readme](https://github.com/philippoo66/optolink-splitter)
 
 ## Installation
@@ -43,6 +43,8 @@ docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
     --hostname $(hostname) \
     --name optolink2mqtt \
     ghcr.io/f18m/optolink2mqtt:latest
+
+docker logs -f optolink2mqtt
 ```
 
 The docker image of optolink2mqtt supports 3 main architectures: `amd64`, `armv7` and `arm64`.
@@ -66,8 +68,6 @@ It's enough to populae the `ha_discovery` section of each register defined in th
 with some metadata specific for each sensor, to get the sensor automatically appear inside your HomeAssistant:
 
 <img title="HA integration" alt="HA integration" src="docs/home_assistant_mqtt_device.png">
-
-
 
 
 ## Related projects
