@@ -2,7 +2,7 @@
 # Builder docker
 #
 
-FROM public.ecr.aws/docker/library/python:3.13-alpine AS builder
+FROM public.ecr.aws/docker/library/python:3.14-alpine AS builder
 
 # NOTE: git is required to get the "hatch-vcs" plugin to work and produce the _optolink2mqtt_version.py file
 RUN apk add build-base linux-headers git
@@ -22,7 +22,7 @@ RUN python -m build --wheel --outdir /build/wheel
 # Production docker
 #
 
-FROM public.ecr.aws/docker/library/python:3.13-alpine
+FROM public.ecr.aws/docker/library/python:3.14-alpine
 
 ARG USERNAME=optolink2mqtt
 LABEL org.opencontainers.image.source=https://github.com/f18m/optolink2mqtt
@@ -45,7 +45,7 @@ RUN mkdir ./conf ./schema
 # if the user fails to bind-mount his own config file, rather than using a default config file.
 # the reason is that at least the MQTT broker IP address is something the user
 # will need to configure
-#COPY optolink2mqtt.yaml ./conf
+RUN mkdir /etc/optolink2mqtt/
 
 # add user optolink2mqtt to image
 RUN if [[ "$USERNAME" != "root" ]]; then \
@@ -56,10 +56,6 @@ RUN if [[ "$USERNAME" != "root" ]]; then \
 
 # process run as optolink2mqtt user
 USER ${USERNAME}
-
-# set conf path
-#ENV optolink2mqttCONFIG="/opt/optolink2mqtt/conf/optolink2mqtt.yaml"
-#ENV optolink2mqttCONFIGSCHEMA="/opt/optolink2mqtt/schema/optolink2mqtt.schema.yaml"
 
 # add deps to PYTHONPATH
 ENV PYTHONPATH="/opt/optolink2mqtt/src:/opt/optolink2mqtt/deps"
