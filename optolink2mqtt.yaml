@@ -136,11 +136,32 @@ registers_poll_list:
     scale_factor: 1
     signed: false
     ha_discovery:
-      name: "Heating Circuit Pump"
+      name: "Secondary Circuit Pump"
       platform: binary_sensor
       device_class: running
       payload_on: "1"
       payload_off: "0"
+
+
+  # yet another example, showing the "byte_filter" feature:
+  # this is useful because in some cases the Viessmann register is 3 bytes long,
+  # but only 2 bytes are relevant for the actual value; in this case you can
+  # use the "byte_filter" to specify which bytes should be considered when
+  # extracting the value from the register raw data.
+
+  - name: dhw_temperature_top
+    sampling_period_seconds: 20
+    register: 0x01CD
+    length: 3
+    scale_factor: 0.1
+    byte_filter: "b:0:1"  # of the 3 bytes, consider only the first two bytes; then apply the scale factor
+    signed: true
+    ha_discovery:
+      name: "Domestic Hot Water Top Temperature"
+      platform: sensor
+      device_class: temperature
+      unit_of_measurement: "°C"
+
 
   # PLEASE NOTE THAT DISCOVERING THE CORRECT REGISTERS TO POLL IS
   # SOMETHING YOU NEED TO DO BY YOURSELF, AS IT DEPENDS ON THE
