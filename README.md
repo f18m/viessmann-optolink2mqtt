@@ -1,3 +1,6 @@
+![GitHub Tag](https://img.shields.io/github/v/tag/f18m/viessmann-optolink2mqtt)
+![PyPI - Version](https://img.shields.io/pypi/v/viessmann-optolink2mqtt)
+
 # viessmann-optolink2mqtt
 
 Open source interface between a Viessmann device (heat pump, gas heater, etc) and 
@@ -24,7 +27,9 @@ Both methods are meant to be used from a Linux Operating system which has the US
 ```sh
 python3 -m venv optolink2mqtt-venv
 source optolink2mqtt-venv/bin/activate
-pip install optolink2mqtt
+pip install viessmann-optolink2mqtt
+
+optolink2mqtt --help
 ```
 
 ### Docker
