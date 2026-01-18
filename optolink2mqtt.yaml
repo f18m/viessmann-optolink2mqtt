@@ -49,8 +49,7 @@ mqtt:
   reconnect_period_sec: 5
 
   # request: name of the topic that optolink2mqtt will subscribe to, and where it will wait for information requests;
-  # to activate the request just send any payload message (e.g. "REQUEST") to a topic like:
-  # <optolink2mqtt/COMPUTER_NAME/request/cpu_percent>. 
+  # FIXME: this feature is not yet implemented !! If you need it please open an issue on GitHub !!
   request_topic: "optolink2mqtt/request/"
 
   ha_discovery:
@@ -75,11 +74,13 @@ registers_poll_list:
     sampling_period_seconds: 10
 
     # each register of the Viessmann device has a few key attributes you need to know/discover:
-    # the address, its length (in bytes), its scale factor and whether the number contained is signed or not
+    # the address, its length (in bytes), its scale factor, whether the number contained is signed or not,
+    # and if the register is writable or read-only.
     register: 0x0101
     length: 2
     scale_factor: 0.1
     signed: false
+    writable: false
 
     # the whole "ha_discovery" section is optional and is useful only if you have
     # mqtt.ha_discovery.enabled set to "true" and you use HomeAssistant.
@@ -98,6 +99,7 @@ registers_poll_list:
     length: 4
     scale_factor: 0.1
     signed: false
+    writable: false
     ha_discovery:
       name: "Domestic Hot Water Electric Energy kWh"
       platform: sensor
@@ -113,6 +115,10 @@ registers_poll_list:
     length: 1
     scale_factor: 1
     signed: false
+    # IMPORTANT: when a register is flagged as "writable: true", optolink2mqtt will
+    # subscribe to the specific MQTT topic '<mqtt.publish_topic_prefix>/<register.name>/set'
+    # and will write to the Viessmann device any value that is received from that topic
+    writable: true
     enum:
       0: "Off"
       1: "DHW only"
@@ -135,6 +141,7 @@ registers_poll_list:
     length: 1
     scale_factor: 1
     signed: false
+    writable: false
     ha_discovery:
       name: "Secondary Circuit Pump"
       platform: binary_sensor
@@ -156,6 +163,7 @@ registers_poll_list:
     scale_factor: 0.1
     byte_filter: "b:0:1"  # of the 3 bytes, consider only the first two bytes; then apply the scale factor
     signed: true
+    writable: false
     ha_discovery:
       name: "Domestic Hot Water Top Temperature"
       platform: sensor

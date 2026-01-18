@@ -285,7 +285,7 @@ class Optolink2MqttApp:
             return 2
 
         #
-        # parse schedule
+        # parse list of registers & build a schedule
         #
         register_list = self.config.config["registers_poll_list"]
         assert isinstance(register_list, list)
@@ -298,16 +298,8 @@ class Optolink2MqttApp:
         for reg in register_list:
             try:
                 register_instance = OptolinkVS2Register(
-                    reg["name"],
-                    reg["sampling_period_seconds"],
-                    reg["register"],
-                    reg["length"],
-                    reg["signed"],
-                    reg["scale_factor"],
-                    reg["byte_filter"],
-                    reg["enum"],
+                    reg,
                     self.config.config["mqtt"]["publish_topic_prefix"],
-                    reg["ha_discovery"],
                 )
             except ValueError as e:
                 logging.error(f"Cannot parse register definition #{i}: {e}. Aborting.")
@@ -330,7 +322,7 @@ class Optolink2MqttApp:
             )
             i += 1
 
-            # store the Schedule also locally:
+            # store the OptolinkVS2Register also locally:
             self.register_list.append(register_instance)
 
         # add periodic log
@@ -417,6 +409,14 @@ class Optolink2MqttApp:
             logging.error(f"Cannot connect to MQTT broker: {e}. Retrying shortly.")
             # IMPORTANT: there's no need to abort here -- paho MQTT client loop_start() will keep trying to reconnect
             # so, if and when the MQTT broker will be available, the connection will be established
+
+        # if a register is writable, subscribe to its 'command' topic:
+        for register_instance in self.register_list:
+            if register_instance.writable:
+                self.mqtt_client.subscribe(register_instance.get_mqtt_command_topic())
+        logging.info(
+            f"Executed {self.mqtt_client.num_subscriptions} MQTT subscriptions for writable registers."
+        )
 
         self.last_ha_discovery_messages_connection_id = MqttClient.CONN_ID_INVALID
 
