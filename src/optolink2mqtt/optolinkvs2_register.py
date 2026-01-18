@@ -258,6 +258,11 @@ class OptolinkVS2Register:
             "availability_topic",
             "payload_available",
             "payload_not_available",
+            "min",
+            "max",
+            "step",
+            "mode",
+            "optimistic",
         ]
         for o in optional_parameters:
             if o in self.ha_discovery and self.ha_discovery[o]:

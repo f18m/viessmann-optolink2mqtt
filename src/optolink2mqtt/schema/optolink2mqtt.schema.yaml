@@ -60,3 +60,11 @@ register_ha_discovery:
   payload_off: str(required=False)
   value_template: str(required=False)
   state_class: str(required=False)
+  min: num(required=False)
+  max: num(required=False)
+  step: num(required=False)
+  mode: str(required=False)
+  optimistic: bool(required=False)
+  
+  # if you update this list, remember to update also the get_ha_discovery_payload()
+  # method in optolinkvs2_register.py accordingly!
