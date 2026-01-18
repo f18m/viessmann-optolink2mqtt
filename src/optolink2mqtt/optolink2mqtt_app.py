@@ -39,6 +39,10 @@ class Optolink2MqttApp:
 
     MAX_PENDING_MESSAGES = 1000
 
+    HIGH_SCHEDULER_PRIORITY = 1
+    NORMAL_SCHEDULER_PRIORITY = 10
+    LOW_SCHEDULER_PRIORITY = 100
+
     def __init__(self) -> None:
         # the app is composed by 4 major components:
         self.config = None  # instance of Config
@@ -77,7 +81,7 @@ class Optolink2MqttApp:
         # reschedule next occurrence for this register
         app.scheduler.enter(
             reg.get_next_occurrence_in_seconds(),
-            1,
+            Optolink2MqttApp.NORMAL_SCHEDULER_PRIORITY,
             Optolink2MqttApp.on_schedule_timer,
             (app, reg),
         )
@@ -112,7 +116,10 @@ class Optolink2MqttApp:
         # reschedule next occurrence for status log
         log_period_sec = int(app.config.config["logging"]["report_status_period_sec"])
         app.scheduler.enter(
-            log_period_sec, 1, Optolink2MqttApp.on_log_timer, tuple([app])
+            log_period_sec,
+            Optolink2MqttApp.LOW_SCHEDULER_PRIORITY,
+            Optolink2MqttApp.on_log_timer,
+            tuple([app]),
         )
         return
 
@@ -132,7 +139,7 @@ class Optolink2MqttApp:
 
     def _publish_ha_discovery_messages(self) -> int:
         """
-        Publish MQTT discovery messages for HomeAssistant, from all tasks that have been decorated
+        Publish MQTT discovery messages for HomeAssistant, from all registers that have been decorated
         with the "ha_discovery" metadata.
         Returns the number of MQTT discovery messages published.
         """
@@ -309,7 +316,7 @@ class Optolink2MqttApp:
             # include this in our scheduler:
             self.scheduler.enter(
                 first_time_delay_sec,
-                1,
+                Optolink2MqttApp.NORMAL_SCHEDULER_PRIORITY,
                 Optolink2MqttApp.on_schedule_timer,
                 (self, register_instance),
             )
@@ -328,7 +335,10 @@ class Optolink2MqttApp:
                 f"optolink2mqtt status will be published on topic {self.mqtt_client.get_optolink2mqtt_status_topic()} every {log_period_sec}sec"
             )
             self.scheduler.enter(
-                log_period_sec, 1, Optolink2MqttApp.on_log_timer, tuple([self])
+                log_period_sec,
+                Optolink2MqttApp.LOW_SCHEDULER_PRIORITY,
+                Optolink2MqttApp.on_log_timer,
+                tuple([self]),
             )
         # else: logging of the status has been disabled
 
@@ -391,18 +401,33 @@ class Optolink2MqttApp:
             logging.error(
                 f"Cannot convert MQTT payload '{payload}' into raw data for register '{reg.name}': {e}"
             )
-            return
+            raw_data = None
+            # keep going -- need to schedule a read later anyway
 
         # perform the write operation
-        rx_data = self.optolink_interface.write_datapoint_ext(reg.address, raw_data)
-        if rx_data.is_successful():
-            logging.info(
-                f"Successfully wrote value [{raw_data.hex()}], obtained from MQTT payload '{payload}' to register '{reg.name}' (0x{reg.address:04x})"
-            )
-        else:
-            logging.error(
-                f"Failed to write register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
-            )
+        if raw_data is not None:
+            rx_data = self.optolink_interface.write_datapoint_ext(reg.address, raw_data)
+            if rx_data.is_successful():
+                logging.info(
+                    f"Successfully wrote value [{raw_data.hex()}], obtained from MQTT payload '{payload}' to register '{reg.name}' (0x{reg.address:04x})"
+                )
+            else:
+                logging.error(
+                    f"Failed to write register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
+                )
+                # keep going -- need to schedule a read later anyway
+
+        # now schedule to read back the register to publish the updated value on MQTT ASAP;
+        # otherwise other MQTT clients will not see the updated value till the next
+        # scheduled read which could be minutes later !!
+        # This is useful to do even in case of write failure, because we need to inform ASAP
+        # the other MQTT clients that the actual value of the register did not change !
+        self.scheduler.enter(
+            0.01,  # close-to-zero delay
+            Optolink2MqttApp.HIGH_SCHEDULER_PRIORITY,
+            Optolink2MqttApp.on_schedule_timer,
+            (self, reg),
+        )
 
     def _core_loop(self) -> None:
         """
@@ -413,21 +438,20 @@ class Optolink2MqttApp:
         * MQTT discovery messages were requested
         * etc
 
-        This function exits only in case: an exception is thrown or the total number
-        of tasks executed reaches the limit set in the configuration file.
+        This function exits only in case an exception is thrown
         """
         sleep_quantum_sec = 0.5
 
         while self.keep_running:
-            # execute all tasks waiting in the queue
-            delay_for_next_task_sec = self.scheduler.run(blocking=False)
+            # execute all sampling operations waiting in the queue
+            delay_for_next_register_sec = self.scheduler.run(blocking=False)
 
             # execute a sliced wait, so we reuse this thread to check for other occurrences
             # (instead of resorting to a multithread Python app)
             time_waited_sec = 0
             while (
-                delay_for_next_task_sec > 0
-                and time_waited_sec < delay_for_next_task_sec
+                delay_for_next_register_sec > 0
+                and time_waited_sec < delay_for_next_register_sec
             ):
                 time.sleep(sleep_quantum_sec)
                 time_waited_sec += sleep_quantum_sec
