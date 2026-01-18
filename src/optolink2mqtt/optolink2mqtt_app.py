@@ -19,6 +19,7 @@ limitations under the License.
 
 import argparse
 import os
+import queue
 import sched
 import socket
 import logging
@@ -26,6 +27,7 @@ import sys
 import platform
 import time
 import serial
+import paho.mqtt.client as paho  # pip install paho-mqtt
 
 from .config import Config
 from .mqtt_client import MqttClient
@@ -35,15 +37,19 @@ from .optolinkvs2_protocol import OptolinkVS2Protocol
 
 class Optolink2MqttApp:
 
+    MAX_PENDING_MESSAGES = 1000
+
     def __init__(self) -> None:
         # the app is composed by 4 major components:
         self.config = None  # instance of Config
+        self.message_queue = queue.Queue(Optolink2MqttApp.MAX_PENDING_MESSAGES)
         self.mqtt_client = None  # instance of MqttClient
         self.scheduler = None  # instance of sched.scheduler
         self.optolink_interface = None  # instance of OptolinkVS2Protocol
-
         self.last_logged_status = (None, None, None)
-        self.register_list = []  # list of Schedule instances
+
+        # dict of OptolinkVS2Register instances keyed by their COMMAND TOPIC
+        self.register_list_by_cmd_topic = {}
 
     @staticmethod
     def on_schedule_timer(app: "Optolink2MqttApp", reg: OptolinkVS2Register) -> None:
@@ -59,16 +65,16 @@ class Optolink2MqttApp:
 
         rx_data = app.optolink_interface.read_datapoint_ext(reg.address, reg.length)
         if rx_data.is_successful():
-            # publish on MQTT
+            # publish on MQTT the "value" obtained from the raw data
             app.mqtt_client.publish(
-                reg.get_mqtt_state_topic(), reg.get_mqtt_payload(rx_data.data)
+                reg.get_mqtt_state_topic(), reg.get_value_from_rawdata(rx_data.data)
             )
         else:
             logging.error(
                 f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
             )
 
-        # add next timer task
+        # reschedule next occurrence for this register
         app.scheduler.enter(
             reg.get_next_occurrence_in_seconds(),
             1,
@@ -81,7 +87,7 @@ class Optolink2MqttApp:
     def log_status() -> None:
         # TODO: add stats from VS2 interface
         logging.info(
-            f"optolink2mqtt status: {MqttClient.num_disconnects} MQTT disconnections; {MqttClient.num_published_successful}/{MqttClient.num_published_total} successful/total MQTT messages published"
+            f"optolink2mqtt status: {MqttClient.num_disconnects} MQTT disconnections; {MqttClient.num_published_successful}/{MqttClient.num_published_total} successful/total MQTT messages published; {MqttClient.num_received_messages} MQTT messages received from subscribed topics"
         )
 
     @staticmethod
@@ -103,7 +109,7 @@ class Optolink2MqttApp:
 
             app.last_logged_status = new_status
 
-        # add next timer task
+        # reschedule next occurrence for status log
         log_period_sec = int(app.config.config["logging"]["report_status_period_sec"])
         app.scheduler.enter(
             log_period_sec, 1, Optolink2MqttApp.on_log_timer, tuple([app])
@@ -124,7 +130,7 @@ class Optolink2MqttApp:
 
         return __version__
 
-    def publish_ha_discovery_messages(self) -> int:
+    def _publish_ha_discovery_messages(self) -> int:
         """
         Publish MQTT discovery messages for HomeAssistant, from all tasks that have been decorated
         with the "ha_discovery" metadata.
@@ -150,7 +156,7 @@ class Optolink2MqttApp:
             # "connections": [["mac", get_mac_address()]],
         }
         num_msgs = 0
-        for reg in self.register_list:
+        for reg in self.register_list_by_cmd_topic.values():
             # expire the sensor in HomeAssistant after a duration equal to 1.5 the usual interval;
             # also apply a lower bound of 10sec; this is a reasonable way to avoid that a single MQTT
             # message not delivered turns the entity into "not available" inside HomeAssistant;
@@ -169,23 +175,9 @@ class Optolink2MqttApp:
                 num_msgs += 1
 
         logging.info(
-            f"Published a total of {num_msgs} MQTT discovery messages under the topic prefix '{ha_discovery_topic}' for the device '{ha_device_name}'. The HomeAssistant MQTT integration should now be showing {num_msgs} sensors for the device '{ha_device_name}'."
+            f"Published a total of {num_msgs} MQTT discovery messages under the topic prefix '{ha_discovery_topic}' for the device '{ha_device_name}'. The HomeAssistant MQTT integration should now be showing {num_msgs} entities for the device '{ha_device_name}'."
         )
         return num_msgs
-
-    def run_all_tasks(self) -> int:
-        """
-        Run all tasks immediately, disregarding the schedule.
-        Returns the number of tasks that were run.
-        """
-        num_tasks = 0
-        for sch in self.register_list:
-            for task in sch.get_tasks():
-                task.run_task(self.mqtt_client)
-                num_tasks += 1
-
-        logging.info(f"Executed {num_tasks} tasks.")
-        return num_tasks
 
     def setup(self) -> int:
         """
@@ -247,8 +239,9 @@ class Optolink2MqttApp:
                 self.config.config["mqtt"]["ha_discovery"]["topic"] + "/status"
             )
         self.mqtt_client = MqttClient(
+            self.message_queue,
             self.config.config["mqtt"]["clientid"],
-            False,
+            False,  # clean_session
             self.config.config["mqtt"]["publish_topic_prefix"],
             self.config.config["mqtt"]["request_topic"],
             self.config.config["mqtt"]["qos"],
@@ -322,10 +315,13 @@ class Optolink2MqttApp:
             )
             i += 1
 
-            # store the OptolinkVS2Register also locally:
-            self.register_list.append(register_instance)
+            # store the OptolinkVS2Register also locally, in a dict that helps later
+            # to process incoming MQTT write requests:
+            self.register_list_by_cmd_topic[
+                register_instance.get_mqtt_command_topic()
+            ] = register_instance
 
-        # add periodic log
+        # add periodic log to schedule
         log_period_sec = int(self.config.config["logging"]["report_status_period_sec"])
         if log_period_sec > 0:
             logging.info(
@@ -339,12 +335,82 @@ class Optolink2MqttApp:
         # success
         return 0
 
+    def _check_if_time_to_send_ha_discovery_messages(self) -> None:
+        """
+        Checks whether HomeAssistant has (re)started and MQTT discovery messages
+        must be sent again.
+        """
+        curr_conn_id = self.mqtt_client.get_connection_id()
+        if curr_conn_id != self.last_ha_discovery_messages_connection_id:
+            # looks like a new MQTT connection to the broker has (recently) been estabilished;
+            # send out MQTT discovery messages
+            logging.warning(
+                f"New connection to the MQTT broker detected (id={curr_conn_id}), sending out MQTT discovery messages..."
+            )
+            self._publish_ha_discovery_messages()
+            self.last_ha_discovery_messages_connection_id = curr_conn_id
+
+        if self.mqtt_client.get_and_reset_ha_discovery_messages_requested_flag():
+            # MQTT discovery messages have been requested...
+            logging.warning(
+                "Detected notification that Home Assistant just (re)started; phase 1: publishing MQTT discovery messages..."
+            )
+            self._publish_ha_discovery_messages()
+
+            # TODO
+            # logging.warning(
+            #    "Detected notification that Home Assistant just (re)started; phase 2: publishing all sensor values (regardless of their schedule)..."
+            # )
+            # self.read_all_registers()
+
+    def _process_received_mqtt_message(self, msg: paho.MQTTMessage) -> None:
+        """
+        Processes a message received over MQTT from the subscribed topics.
+        """
+
+        topic = msg.topic
+        payload = msg.payload.decode("utf-8")
+
+        if topic not in self.register_list_by_cmd_topic:
+            logging.error(f"Received message from unknown topic: {topic}")
+            return
+
+        logging.debug(f"Processing received MQTT message on topic '{topic}'")
+
+        reg = self.register_list_by_cmd_topic[topic]
+        if not reg.writable:
+            logging.error(
+                f"Received a write request on topic '{topic}' but the associated register '{reg.name}' is not writable"
+            )
+            return
+
+        # try to convert the payload into raw bytes to be written to the register
+        try:
+            raw_data = reg.get_rawdata_from_value(payload)
+        except ValueError as e:
+            logging.error(
+                f"Cannot convert MQTT payload '{payload}' into raw data for register '{reg.name}': {e}"
+            )
+            return
+
+        # perform the write operation
+        rx_data = self.optolink_interface.write_datapoint_ext(reg.address, raw_data)
+        if rx_data.is_successful():
+            logging.info(
+                f"Successfully wrote value [{raw_data.hex()}], obtained from MQTT payload '{payload}' to register '{reg.name}' (0x{reg.address:04x})"
+            )
+        else:
+            logging.error(
+                f"Failed to write register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
+            )
+
     def _core_loop(self) -> None:
         """
         Runs the logic of optolink2mqtt application.
         Every "sleep quantum" the app wakes up and checks whether
         * it's time to read a register
-        * MQTT dicovery messages were requested
+        * some write request has been received over MQTT
+        * MQTT discovery messages were requested
         * etc
 
         This function exits only in case: an exception is thrown or the total number
@@ -367,32 +433,21 @@ class Optolink2MqttApp:
                 time_waited_sec += sleep_quantum_sec
 
                 if self.config.config["mqtt"]["ha_discovery"]["enabled"]:
-                    curr_conn_id = self.mqtt_client.get_connection_id()
-                    if curr_conn_id != self.last_ha_discovery_messages_connection_id:
-                        # looks like a new MQTT connection to the broker has (recently) been estabilished;
-                        # send out MQTT discovery messages
-                        logging.warning(
-                            f"New connection to the MQTT broker detected (id={curr_conn_id}), sending out MQTT discovery messages..."
-                        )
-                        self.publish_ha_discovery_messages()
-                        self.last_ha_discovery_messages_connection_id = curr_conn_id
+                    self._check_if_time_to_send_ha_discovery_messages()
 
-                    if (
-                        self.mqtt_client.get_and_reset_ha_discovery_messages_requested_flag()
-                    ):
-                        # MQTT discovery messages have been requested...
-                        logging.warning(
-                            "Detected notification that Home Assistant just (re)started; phase 1: publishing MQTT discovery messages..."
-                        )
-                        self.publish_ha_discovery_messages()
-
-                        # TODO
-                        # logging.warning(
-                        #    "Detected notification that Home Assistant just (re)started; phase 2: publishing all sensor values (regardless of their schedule)..."
-                        # )
-                        # self.read_all_registers()
+                try:
+                    msg = self.message_queue.get_nowait()
+                    self._process_received_mqtt_message(msg)
+                except queue.Empty:
+                    continue  # no message to process
 
     def run(self) -> int:
+        """
+        Start the main application loop.
+        This function blocks the main thread till the application is stopped.
+        Returns the exit code.
+        """
+
         # estabilish a connection to the MQTT broker
         try:
             self.mqtt_client.connect(
@@ -411,9 +466,9 @@ class Optolink2MqttApp:
             # so, if and when the MQTT broker will be available, the connection will be established
 
         # if a register is writable, subscribe to its 'command' topic:
-        for register_instance in self.register_list:
-            if register_instance.writable:
-                self.mqtt_client.subscribe(register_instance.get_mqtt_command_topic())
+        for cmd_topic, reg in self.register_list_by_cmd_topic.items():
+            if reg.writable:
+                self.mqtt_client.subscribe(cmd_topic)
         logging.info(
             f"Executed {self.mqtt_client.num_subscriptions} MQTT subscriptions for writable registers."
         )
