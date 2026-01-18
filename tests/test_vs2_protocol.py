@@ -19,6 +19,7 @@ from optolink2mqtt.optolinkvs2_protocol import OptolinkVS2Protocol  # noqa: E402
 PORT = "/dev/ttyUSB0"
 logging.basicConfig(level=logging.DEBUG, force=True)
 
+
 class OptolinkVS2ProtocolTest:
 
     def is_serial_port_avail():
@@ -31,8 +32,10 @@ class OptolinkVS2ProtocolTest:
         if not OptolinkVS2ProtocolTest.is_serial_port_avail():
             # only execute this test if the serial port is available
             return
-        
-        ser = serial.Serial(PORT, baudrate=4800, bytesize=8, parity="E", stopbits=2, timeout=0)
+
+        ser = serial.Serial(
+            PORT, baudrate=4800, bytesize=8, parity="E", stopbits=2, timeout=0
+        )
         proto = OptolinkVS2Protocol(ser, show_opto_rx=True)
         try:
             if not ser.is_open:
@@ -52,7 +55,9 @@ class OptolinkVS2ProtocolTest:
                         f"Datapoint content is: {OptolinkVS2Protocol.readable_hex(rxdata.data)}"
                     )
                 else:
-                    logging.error(f"Error reading datapoint: code {rxdata.retcode:#02x}")
+                    logging.error(
+                        f"Error reading datapoint: code {rxdata.retcode:#02x}"
+                    )
                 time.sleep(0.5)
                 i += 1
         except Exception as e:

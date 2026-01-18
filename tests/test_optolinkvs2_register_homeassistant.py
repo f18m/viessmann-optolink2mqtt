@@ -18,430 +18,6 @@ sys.path.append(SRC_DIR)
 
 from optolink2mqtt.optolinkvs2_register import OptolinkVS2Register  # noqa: E402
 
-#
-# trivial unit tests written by AI:
-#
-
-class TestOptolinkVS2RegisterInit:
-    """Tests for OptolinkVS2Register initialization"""
-
-    def test_basic_initialization(self):
-        """Test basic register initialization with minimal parameters"""
-        reg_data = {
-            "name": "Test Register",
-            "sampling_period_seconds": 60,
-            "register": 0x1234,
-            "length": 2,
-            "signed": False,
-            "writable": False,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        assert reg.name == "Test Register"
-        assert reg.sanitized_name == "test_register"
-        assert reg.sampling_period_sec == 60
-        assert reg.address == 0x1234
-        assert reg.length == 2
-        assert reg.signed is False
-        assert reg.writable is False
-        assert reg.scale_factor == 1.0
-
-    def test_sanitized_name_generation(self):
-        """Test that register names are properly sanitized"""
-        test_cases = [
-            ("Test Register", "test_register"),
-            ("  Spaced  Out  ", "spaced__out"),
-            ("UPPERCASE NAME", "uppercase_name"),
-            ("Mixed Case_Name", "mixed_case_name"),
-            ("Name-With-Dashes", "name-with-dashes"),
-        ]
-        
-        for original, expected in test_cases:
-            reg_data = {
-                "name": original,
-                "sampling_period_seconds": 60,
-                "register": 0x0000,
-                "length": 1,
-                "signed": False,
-                "writable": False,
-                "scale_factor": 1.0,
-                "byte_filter": None,
-                "enum": None,
-                "ha_discovery": None,
-            }
-            reg = OptolinkVS2Register(reg_data, "home/device")
-            assert reg.sanitized_name == expected
-
-    def test_mqtt_base_topic_slash_handling(self):
-        """Test that trailing slashes are removed from MQTT base topic"""
-        reg_data = {
-            "name": "Test",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 1,
-            "signed": False,
-            "writable": False,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        
-        # Test with trailing slash
-        reg1 = OptolinkVS2Register(reg_data, "home/device/")
-        assert reg1.mqtt_base_topic == "home/device"
-        
-        # Test without trailing slash
-        reg2 = OptolinkVS2Register(reg_data, "home/device")
-        assert reg2.mqtt_base_topic == "home/device"
-
-    def test_type_conversions(self):
-        """Test that register attributes are properly type-converted"""
-        reg_data = {
-            "name": "Typed Register",
-            "sampling_period_seconds": 30,
-            "register": 0x5678,  # int
-            "length": "4",  # string instead of int
-            "signed": 1,  # truthy value
-            "writable": 0,  # falsy value
-            "scale_factor": "2.5",  # string instead of float
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        assert isinstance(reg.address, int)
-        assert reg.address == 0x5678
-        assert isinstance(reg.length, int)
-        assert reg.length == 4
-        assert isinstance(reg.signed, bool)
-        assert reg.signed is True
-        assert isinstance(reg.writable, bool)
-        assert reg.writable is False
-        assert isinstance(reg.scale_factor, float)
-        assert reg.scale_factor == 2.5
-
-
-class TestOptolinkVS2RegisterMQTT:
-    """Tests for MQTT topic generation methods"""
-
-    def test_get_mqtt_state_topic(self):
-        """Test MQTT state topic generation"""
-        reg_data = {
-            "name": "Living Room Temperature",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 2,
-            "signed": False,
-            "writable": False,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/heater")
-        
-        topic = reg.get_mqtt_state_topic()
-        assert topic == "home/heater/living_room_temperature"
-
-    def test_get_mqtt_command_topic(self):
-        """Test MQTT command topic generation"""
-        reg_data = {
-            "name": "Heating Mode",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 1,
-            "signed": False,
-            "writable": True,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/heater")
-        
-        topic = reg.get_mqtt_command_topic()
-        assert topic == "home/heater/heating_mode/set"
-
-    def test_mqtt_topics_with_trailing_slash(self):
-        """Test MQTT topics with trailing slash in base topic"""
-        reg_data = {
-            "name": "Test Parameter",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 1,
-            "signed": False,
-            "writable": False,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device/")
-        
-        assert reg.get_mqtt_state_topic() == "home/device/test_parameter"
-
-
-
-#
-# core unit tests:
-#
-
-class TestOptolinkVS2RegisterValueConversion:
-    """Tests for value conversion methods (get_value_from_rawdata, get_rawdata_from_value)"""
-
-    def test_get_value_unsigned_no_scale(self):
-        """Test reading unsigned integer without scaling"""
-        reg_data = {
-            "name": "Counter",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 2,
-            "signed": False,
-            "writable": False,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        # Test little-endian conversion
-        rawdata = bytearray([0x34, 0x12])  # 0x1234 in little-endian
-        value = reg.get_value_from_rawdata(rawdata)
-        assert value == 0x1234
-
-    def test_get_value_signed_no_scale(self):
-        """Test reading signed integer without scaling"""
-        reg_data = {
-            "name": "Temperature",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 2,
-            "signed": True,
-            "writable": False,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        # Test negative value
-        rawdata = bytearray([0xFF, 0xFF])  # -1 in two's complement
-        value = reg.get_value_from_rawdata(rawdata)
-        assert value == -1
-
-    def test_get_value_with_scale_factor(self):
-        """Test reading value with scale factor"""
-        reg_data = {
-            "name": "Temperature",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 2,
-            "signed": False,
-            "writable": False,
-            "scale_factor": 0.1,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        # 100 * 0.1 = 10.0
-        rawdata = bytearray([0x64, 0x00])  # 100 in little-endian
-        value = reg.get_value_from_rawdata(rawdata)
-        assert value == 10.0
-
-    def test_get_value_with_byte_filter(self):
-        """Test reading value with byte filter applied"""
-        reg_data = {
-            "name": "Filtered",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 4,
-            "signed": False,
-            "writable": False,
-            "scale_factor": 1.0,
-            "byte_filter": "b:1:2",  # Use bytes 1-2 (inclusive)
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        # Input: [0xAA, 0xBB, 0xCC, 0xDD]
-        # After filter "b:1:2": [0xBB, 0xCC]
-        # Result: 0xCCBB
-        rawdata = bytearray([0xAA, 0xBB, 0xCC, 0xDD])
-        value = reg.get_value_from_rawdata(rawdata)
-        assert value == 0xCCBB
-
-    def test_get_value_with_enum(self):
-        """Test reading enumerated value"""
-        enum_dict = {0: "OFF", 1: "ON", 2: "STANDBY"}
-        reg_data = {
-            "name": "Status",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 1,
-            "signed": False,
-            "writable": False,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": enum_dict,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        assert reg.get_value_from_rawdata(bytearray([0x00])) == "OFF"
-        assert reg.get_value_from_rawdata(bytearray([0x01])) == "ON"
-        assert reg.get_value_from_rawdata(bytearray([0x02])) == "STANDBY"
-
-    def test_get_value_with_enum_unknown_value(self):
-        """Test reading unknown enumerated value"""
-        enum_dict = {0: "OFF", 1: "ON"}
-        reg_data = {
-            "name": "Status",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 1,
-            "signed": False,
-            "writable": False,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": enum_dict,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        value = reg.get_value_from_rawdata(bytearray([0xFF]))
-        assert value == "Unknown (255)"
-
-    def test_get_rawdata_from_value_unsigned(self):
-        """Test converting unsigned value to raw data"""
-        reg_data = {
-            "name": "Counter",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 2,
-            "signed": False,
-            "writable": True,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        rawdata = reg.get_rawdata_from_value("4660")  # 0x1234
-        assert rawdata == bytearray([0x34, 0x12])
-
-    def test_get_rawdata_from_value_signed(self):
-        """Test converting signed value to raw data"""
-        reg_data = {
-            "name": "Temperature",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 2,
-            "signed": True,
-            "writable": True,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        rawdata = reg.get_rawdata_from_value("-1")
-        assert rawdata == bytearray([0xFF, 0xFF])
-
-    def test_get_rawdata_from_value_with_scale_factor(self):
-        """Test converting value with scale factor to raw data"""
-        reg_data = {
-            "name": "Temperature",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 2,
-            "signed": False,
-            "writable": True,
-            "scale_factor": 0.1,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        # Input 10.0 / 0.1 = 100
-        rawdata = reg.get_rawdata_from_value("10.0")
-        assert rawdata == bytearray([0x64, 0x00])
-
-    def test_get_rawdata_from_value_with_enum(self):
-        """Test converting enum value to raw data"""
-        enum_dict = {0: "OFF", 1: "ON", 2: "STANDBY"}
-        reg_data = {
-            "name": "Status",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 1,
-            "signed": False,
-            "writable": True,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": enum_dict,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        assert reg.get_rawdata_from_value("OFF") == bytearray([0x00])
-        assert reg.get_rawdata_from_value("ON") == bytearray([0x01])
-        assert reg.get_rawdata_from_value("STANDBY") == bytearray([0x02])
-
-    def test_get_rawdata_from_value_invalid_enum(self):
-        """Test error handling for invalid enum value"""
-        enum_dict = {0: "OFF", 1: "ON"}
-        reg_data = {
-            "name": "Status",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 1,
-            "signed": False,
-            "writable": True,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": enum_dict,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        with pytest.raises(ValueError) as exc_info:
-            reg.get_rawdata_from_value("INVALID")
-        assert "Invalid value" in str(exc_info.value)
-        assert "INVALID" in str(exc_info.value)
-
-    def test_get_rawdata_overflow_error(self):
-        """Test error handling when value overflows the register length"""
-        reg_data = {
-            "name": "Byte",
-            "sampling_period_seconds": 60,
-            "register": 0x0000,
-            "length": 1,
-            "signed": False,
-            "writable": True,
-            "scale_factor": 1.0,
-            "byte_filter": None,
-            "enum": None,
-            "ha_discovery": None,
-        }
-        reg = OptolinkVS2Register(reg_data, "home/device")
-        
-        # 256 cannot fit in 1 byte - will raise OverflowError from int.to_bytes()
-        with pytest.raises((ValueError, OverflowError)):
-            reg.get_rawdata_from_value("256")
 
 class TestOptolinkVS2RegisterHomeAssistant:
     """Tests for HomeAssistant discovery methods"""
@@ -451,13 +27,10 @@ class TestOptolinkVS2RegisterHomeAssistant:
         ha_discovery = {
             "name": "Living Room Temperature",
             "platform": "sensor",
-            "device_class": "temperature",
             "unit_of_measurement": "°C",
             "state_class": "measurement",
             "icon": "mdi:thermometer",
             "device_class": None,
-            "state_class": None,
-            "unit_of_measurement": None,
             "payload_on": None,
             "payload_off": None,
             "availability_topic": None,
@@ -540,7 +113,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "enum": None,
             "ha_discovery": ha_discovery,
         }
-        
+
         with pytest.raises(Exception) as exc_info:
             OptolinkVS2Register(reg_data, "home/device")
         assert "invalid HA discovery 'name' property" in str(exc_info.value)
@@ -573,7 +146,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "enum": None,
             "ha_discovery": ha_discovery,
         }
-        
+
         with pytest.raises(Exception) as exc_info:
             OptolinkVS2Register(reg_data, "home/device")
         assert "invalid HA discovery 'platform' property" in str(exc_info.value)
@@ -606,7 +179,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "enum": None,
             "ha_discovery": ha_discovery,
         }
-        
+
         with pytest.raises(Exception) as exc_info:
             OptolinkVS2Register(reg_data, "home/device")
         assert "incompatible HA discovery 'platform' property" in str(exc_info.value)
@@ -639,7 +212,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "enum": None,
             "ha_discovery": ha_discovery,
         }
-        
+
         with pytest.raises(Exception) as exc_info:
             OptolinkVS2Register(reg_data, "home/device")
         assert "incompatible HA discovery 'platform' property" in str(exc_info.value)
@@ -659,7 +232,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         unique_id = reg.get_ha_unique_id("MyHeater")
         assert unique_id == "MyHeater-temperature-f800"
 
@@ -692,7 +265,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         topic = reg.get_ha_discovery_topic("homeassistant", "MyHeater")
         assert "sensor" in topic
         assert "MyHeater" in topic
@@ -727,19 +300,16 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         device_dict = {
             "identifiers": ["MyHeater"],
             "name": "My Heater",
             "model": "Viessmann",
         }
         payload_str = reg.get_ha_discovery_payload(
-            "MyHeater",
-            "1.0.0",
-            device_dict,
-            3600
+            "MyHeater", "1.0.0", device_dict, 3600
         )
-        
+
         payload = json.loads(payload_str)
         assert payload["name"] == "Room Temperature"
         assert payload["unit_of_measurement"] == "°C"
@@ -775,18 +345,15 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         device_dict = {
             "identifiers": ["MyHeater"],
             "name": "My Heater",
         }
         payload_str = reg.get_ha_discovery_payload(
-            "MyHeater",
-            "1.0.0",
-            device_dict,
-            3600
+            "MyHeater", "1.0.0", device_dict, 3600
         )
-        
+
         payload = json.loads(payload_str)
         assert payload["command_topic"] == "home/device/pump/set"
         assert payload["payload_on"] == "ON"
@@ -822,18 +389,15 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         device_dict = {
             "identifiers": ["MyHeater"],
             "name": "My Heater",
         }
         payload_str = reg.get_ha_discovery_payload(
-            "MyHeater",
-            "1.0.0",
-            device_dict,
-            3600
+            "MyHeater", "1.0.0", device_dict, 3600
         )
-        
+
         payload = json.loads(payload_str)
         assert "options" in payload
         assert "OFF" in payload["options"]
@@ -869,15 +433,12 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         device_dict = {"identifiers": ["MyHeater"]}
         payload_str = reg.get_ha_discovery_payload(
-            "MyHeater",
-            "1.0.0",
-            device_dict,
-            3600
+            "MyHeater", "1.0.0", device_dict, 3600
         )
-        
+
         payload = json.loads(payload_str)
         assert payload["expire_after"] == 1800
 
@@ -910,15 +471,12 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         device_dict = {"identifiers": ["MyHeater"]}
         payload_str = reg.get_ha_discovery_payload(
-            "MyHeater",
-            "1.0.0",
-            device_dict,
-            7200  # default
+            "MyHeater", "1.0.0", device_dict, 7200  # default
         )
-        
+
         payload = json.loads(payload_str)
         assert payload["expire_after"] == 7200
 
@@ -941,7 +499,7 @@ class TestOptolinkVS2RegisterEdgeCases:
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         assert reg.get_value_from_rawdata(bytearray([0xFF])) == 255
         assert reg.get_rawdata_from_value("255") == bytearray([0xFF])
 
@@ -960,7 +518,7 @@ class TestOptolinkVS2RegisterEdgeCases:
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         rawdata = bytearray([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])
         value = reg.get_value_from_rawdata(rawdata)
         assert value == 0x0807060504030201
@@ -980,7 +538,7 @@ class TestOptolinkVS2RegisterEdgeCases:
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         assert reg.get_value_from_rawdata(bytearray([0x00, 0x00])) == 0
 
     def test_large_scale_factor(self):
@@ -998,7 +556,7 @@ class TestOptolinkVS2RegisterEdgeCases:
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         # 5 * 100.0 = 500.0
         rawdata = bytearray([0x05, 0x00])
         value = reg.get_value_from_rawdata(rawdata)
@@ -1019,6 +577,6 @@ class TestOptolinkVS2RegisterEdgeCases:
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
-        
+
         # Special characters should be preserved or handled correctly
         assert reg.sanitized_name == "flow_(°c)_/_return-temp."
