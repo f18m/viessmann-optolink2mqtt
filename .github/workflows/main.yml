@@ -55,10 +55,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest
-      # disabled till I write unit tests
-      # - name: Run tests
-      #   run: |
-      #     pytest -vvv --log-level=INFO -m unit
+      - name: Run tests
+        run: |
+          pytest -vvv --log-level=INFO
      
 
   # build_docker_nonroot_variant:

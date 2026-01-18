@@ -44,7 +44,7 @@ register_definition:
   writable: bool(required=False) # defaults to false
   byte_filter: str(required=False) # defaults to no byte filter
   enum: map(str,str,required=False)  # defaults to no enumeration
-  scale_factor: num(required=False) # defaults to 1
+  scale_factor: num(min=0, required=False) # defaults to 1
   ha_discovery: include('register_ha_discovery',required=False) # no HomeAssistant discovery by default
 ---
 register_ha_discovery:

@@ -217,6 +217,13 @@ class Config:
             reg["writable"] = False
         if "scale_factor" not in reg:
             reg["scale_factor"] = 1.0
+        else:
+            # ensure scale_factor is a float
+            if float(reg["scale_factor"]) <= 0.0:
+                raise ValueError(
+                    f"{reg['name']}: Invalid 'scale_factor' attribute in configuration file: shall be greater than zero"
+                )
+
         if "byte_filter" not in reg:
             reg["byte_filter"] = None
         if "enum" not in reg:
