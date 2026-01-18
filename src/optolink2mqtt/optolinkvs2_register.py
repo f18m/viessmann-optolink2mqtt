@@ -26,7 +26,13 @@ import json
 
 class OptolinkVS2Register:
     """
-    A register to be read or written inside the Viessmann device, via the Optolink interface
+    Represents a register to be read or written inside the Viessmann device, via the Optolink interface.
+    Each register is defined by its metadata (name, address, length, signed/unsigned, scale factor, etc.)
+    and possibly HomeAssistant discovery information.
+
+    Notably, this class does NOT store a specific VALUE for the register itself; rather it provides methods
+    to EXTRACT the value from raw data read from the device, or to CONVERT a value into raw data suitable
+    to be written into the device.
     """
 
     MAX_DECIMALS = 2
@@ -70,7 +76,7 @@ class OptolinkVS2Register:
         """
         return self.sampling_period_sec
 
-    def get_value(self, rawdata: bytearray) -> Any:
+    def get_value_from_rawdata(self, rawdata: bytearray) -> Any:
         """
         Returns the value of the register from the given raw data.
         This function was named "bytesval" in original optolink-splitter codebase
@@ -93,6 +99,40 @@ class OptolinkVS2Register:
                 val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
         return val
 
+    def get_rawdata_from_value(self, str_value: str) -> bytearray:
+        """
+        Converts a generic string into raw data (bytearray) suitable to be written
+        into the register of the Viessmann device.
+        Raises ValueError in case of invalid value.
+        """
+        val = 0
+        if self.enum_dict is not None:
+            # reverse lookup in enum dict
+            reverse_enum = {v: k for k, v in self.enum_dict.items()}
+            if str_value not in reverse_enum:
+                raise ValueError(
+                    f"Invalid value '{str_value}' for register '{self.name}'; valid values are: {list(self.enum_dict.values())}"
+                )
+            val = reverse_enum[str_value]
+        else:
+            # normal numeric value
+            if self.scale_factor != 1.0:
+                val = int(
+                    round(
+                        float(str_value) / self.scale_factor,
+                        OptolinkVS2Register.MAX_DECIMALS,
+                    )
+                )
+            else:
+                val = int(str_value)
+        rawdata = val.to_bytes(self.length, byteorder="little", signed=self.signed)
+        if len(rawdata) != self.length:
+            raise ValueError(
+                f"Value '{str_value}' for register '{self.name}' cannot be represented in {self.length} bytes."
+            )
+
+        return bytearray(rawdata)
+
     #
     # MQTT helpers
     #
@@ -102,9 +142,6 @@ class OptolinkVS2Register:
 
     def get_mqtt_command_topic(self) -> str:
         return f"{self.mqtt_base_topic}/{self.sanitized_name}/set"
-
-    def get_mqtt_payload(self, rawdata: bytearray) -> str:
-        return f"{self.get_value(rawdata)}"
 
     #
     # MQTT/HomeAssistant Discovery Message helpers

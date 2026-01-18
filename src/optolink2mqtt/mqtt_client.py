@@ -18,6 +18,7 @@ limitations under the License.
 """
 
 import logging
+import queue
 import paho.mqtt.client as paho  # pip install paho-mqtt
 import time
 from typing import Any, Optional
@@ -25,7 +26,13 @@ from typing import Any, Optional
 
 class MqttClient:
     """
-    Wrapper around paho.Client
+    Wrapper around paho.Client.
+
+    Assumes that all network processing will happen on the paho secondary thread
+    started via loop_start().
+    Enforces use of a thread-safe queue to process incoming messages.
+    Provides some HomeAssistant-specific features (e.g., tracking when HA discovery messages
+    need to be re-published).
     """
 
     # Counter of MQTT broker disconnections
@@ -40,6 +47,9 @@ class MqttClient:
     # Counter of total subscriptions made
     num_subscriptions = 0
 
+    # Counter of total messages received from subscribed topics
+    num_received_messages = 0
+
     # Constant value indicating the absence of a connection to the broker from get_connection_id()
     CONN_ID_INVALID = 0
 
@@ -51,6 +61,7 @@ class MqttClient:
 
     def __init__(
         self,
+        message_queue: queue.Queue,
         client_id: str,
         clean_session: bool,
         topic_prefix: str,
@@ -61,6 +72,7 @@ class MqttClient:
         ha_status_topic: str,
     ) -> None:
 
+        self.message_queue = message_queue
         self.topic_prefix = topic_prefix
         assert len(self.topic_prefix) > 0 and self.topic_prefix[-1] == "/"
 
@@ -153,7 +165,7 @@ class MqttClient:
         """
         Subscribe to a topic on the MQTT broker
         """
-        logging.debug("MqttClient.subscribe on [%s]", topic)
+        logging.info("Subscribing to MQTT topic [%s]", topic)
         ret = self._mqttc.subscribe(topic, self.qos)
         if ret[0] != paho.MQTT_ERR_SUCCESS:
             logging.error(f"Error subscribing to topic '{topic}': return code {ret[0]}")
@@ -302,7 +314,7 @@ class MqttClient:
         MQTT callback in case a message is received on the REQUEST topic
         """
         logging.info(
-            f"MqttClient.on_message(): topic: {msg.topic}; payload: {msg.payload}"
+            f"Received MQTT message: topic=[{msg.topic}] payload=[{msg.payload.decode('UTF-8')}]"
         )
 
         if msg.topic.startswith(self.request_topic):
@@ -318,7 +330,9 @@ class MqttClient:
                 # this is typically not a good news, unless it's a planned maintainance
                 logging.info("!!! HomeAssistant status changed to 'offline' !!!")
         else:
-            logging.warning(f"Unknown topic: {msg.topic}")
+            # push the message to the thread-safe queue that was provided at construction time
+            MqttClient.num_received_messages += 1
+            self.message_queue.put(msg)
         return
 
     def on_publish(
