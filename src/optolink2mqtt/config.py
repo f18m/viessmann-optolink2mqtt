@@ -25,7 +25,13 @@ from yamale import YamaleError
 from platformdirs import PlatformDirs
 import socket
 
-from .ha_units import HomeAssistantMeasurementUnits
+from .ha_units import HA_MEASUREMENT_UNITS
+from .ha_support import (
+    HA_SUPPORTED_DEVICE_CLASSES,
+    HA_SUPPORTED_STATE_CLASSES,
+    HA_SUPPORTED_PLATFORMS,
+    HA_UNSUPPORTED_DEVICE_CLASSES_FOR_MEASUREMENTS,
+)
 
 
 class Config:
@@ -36,115 +42,6 @@ class Config:
 
     CONFIG_FILE_NAME = "optolink2mqtt.yaml"
     CONFIG_SCHEMA_FILE_NAME = "optolink2mqtt.schema.yaml"
-
-    # FIXME, TODO: remove all these hardcoded Home Assistant constants that do not make sense for optolink2mqtt
-
-    HA_SUPPORTED_PLATFORMS = ["sensor", "binary_sensor"]
-    HA_SUPPORTED_DEVICE_CLASSES = {
-        # see https://www.home-assistant.io/integrations/binary_sensor/#device-class
-        "binary_sensor": [
-            "battery",
-            "battery_charging",
-            "carbon_monoxide",
-            "cold",
-            "connectivity",
-            "door",
-            "garage_door",
-            "gas",
-            "heat",
-            "light",
-            "lock",
-            "moisture",
-            "motion",
-            "moving",
-            "occupancy",
-            "opening",
-            "plug",
-            "power",
-            "presence",
-            "problem",
-            "running",
-            "safety",
-            "smoke",
-            "sound",
-            "tamper",
-            "update",
-            "vibration",
-            "window",
-        ],
-        # see https://www.home-assistant.io/integrations/sensor/#device-class
-        "sensor": [
-            "date",
-            "enum",
-            "timestamp",
-            "apparent_power",
-            "aqi",
-            "area",
-            "atmospheric_pressure",
-            "battery",
-            "blood_glucose_concentration",
-            "carbon_monoxide",
-            "carbon_dioxide",
-            "conductivity",
-            "current",
-            "data_rate",
-            "data_size",
-            "distance",
-            "duration",
-            "energy",
-            "energy_storage",
-            "frequency",
-            "gas",
-            "humidity",
-            "illuminance",
-            "irradiance",
-            "moisture",
-            "monetary",
-            "nitrogen_dioxide",
-            "nitrogen_monoxide",
-            "nitrous_oxide",
-            "ozone",
-            "ph",
-            "pm1",
-            "pm10",
-            "pm25",
-            "power_factor",
-            "power",
-            "precipitation",
-            "precipitation_intensity",
-            "pressure",
-            "reactive_power",
-            "signal_strength",
-            "sound_pressure",
-            "speed",
-            "sulphur_dioxide",
-            "temperature",
-            "volatile_organic_compounds",
-            "volatile_organic_compounds_parts",
-            "voltage",
-            "volume",
-            "volume_storage",
-            "volume_flow_rate",
-            "water",
-            "weight",
-            "wind_speed",
-        ],
-    }
-
-    # see https://developers.home-assistant.io/docs/core/entity/sensor/#long-term-statistics
-    HA_SUPPORTED_STATE_CLASSES = ["measurement", "total", "total_increasing"]
-
-    # see https://developers.home-assistant.io/docs/core/entity/sensor/#long-term-statistics
-    HA_UNSUPPORTED_DEVICE_CLASSES_FOR_MEASUREMENTS = [
-        "date",
-        "enum",
-        "energy",
-        "gas",
-        "monetary",
-        "timestamp",
-        "volume",
-        "water",
-    ]
 
     def __init__(self):
         self.config = None
@@ -342,27 +239,23 @@ class Config:
             if "platform" not in h:
                 # most of psutil/pySMART tasks are sensors, so "sensor" is a good default:
                 h["platform"] = "sensor"
-            elif h["platform"] not in Config.HA_SUPPORTED_PLATFORMS:
+            elif h["platform"] not in HA_SUPPORTED_PLATFORMS:
                 raise ValueError(
-                    f"{reg['name']}: Invalid 'ha_discovery.platform' attribute in configuration file: {h['platform']}. Expected one of {Config.HA_SUPPORTED_PLATFORMS}"
+                    f"{reg['name']}: Invalid 'ha_discovery.platform' attribute in configuration file: {h['platform']}. Expected one of {HA_SUPPORTED_PLATFORMS}"
                 )
             if "device_class" not in h:
                 h["device_class"] = None
-            elif (
-                h["device_class"]
-                not in Config.HA_SUPPORTED_DEVICE_CLASSES[h["platform"]]
-            ):
+            elif h["device_class"] not in HA_SUPPORTED_DEVICE_CLASSES[h["platform"]]:
                 raise ValueError(
-                    f"{reg['name']}: Invalid 'ha_discovery.device_class' attribute in configuration file: {h['device_class']}. Expected one of {Config.HA_SUPPORTED_DEVICE_CLASSES}"
+                    f"{reg['name']}: Invalid 'ha_discovery.device_class' attribute in configuration file: {h['device_class']}. Expected one of {HA_SUPPORTED_DEVICE_CLASSES}"
                 )
 
             if (
                 "unit_of_measurement" in h
-                and h["unit_of_measurement"]
-                not in HomeAssistantMeasurementUnits.get_all_constants()
+                and h["unit_of_measurement"] not in HA_MEASUREMENT_UNITS
             ):
                 raise ValueError(
-                    f"{reg['name']}: Invalid 'ha_discovery.unit_of_measurement' attribute in configuration file: {h['unit_of_measurement']}. Expected one of {HomeAssistantMeasurementUnits.get_all_constants()}"
+                    f"{reg['name']}: Invalid 'ha_discovery.unit_of_measurement' attribute in configuration file: {h['unit_of_measurement']}. Expected one of {HA_MEASUREMENT_UNITS}"
                 )
 
             if "state_class" not in h:
@@ -372,15 +265,15 @@ class Config:
                 # trigger errors on the HomeAssistant side...
                 if (
                     h["device_class"]
-                    not in Config.HA_UNSUPPORTED_DEVICE_CLASSES_FOR_MEASUREMENTS
+                    not in HA_UNSUPPORTED_DEVICE_CLASSES_FOR_MEASUREMENTS
                 ):
                     h["state_class"] = "measurement"
             elif (
                 "state_class" in h
-                and h["state_class"] not in Config.HA_SUPPORTED_STATE_CLASSES
+                and h["state_class"] not in HA_SUPPORTED_STATE_CLASSES
             ):
                 raise ValueError(
-                    f"{reg['name']}: Invalid 'ha_discovery.state_class' attribute in configuration file: {h['state_class']}. Expected one of {Config.HA_SUPPORTED_STATE_CLASSES}"
+                    f"{reg['name']}: Invalid 'ha_discovery.state_class' attribute in configuration file: {h['state_class']}. Expected one of {HA_SUPPORTED_STATE_CLASSES}"
                 )
 
             # optional parameters without defaults:

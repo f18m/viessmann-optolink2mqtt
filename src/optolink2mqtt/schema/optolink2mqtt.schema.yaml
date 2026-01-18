@@ -3,7 +3,7 @@
 logging: include('logging',required=False)
 optolink: include('optolink',required=True)
 mqtt: include('mqtt',required=True)
-registers_poll_list: list(include('register_def'))
+registers_poll_list: list(include('register_definition'))
 
 ---
 logging:
@@ -35,7 +35,7 @@ mqtt_broker:
   username: str(required=False)
   password: str(required=False)
 ---
-register_def: 
+register_definition: 
   name: str()
   sampling_period_seconds: int(min=1)
   register: int()
@@ -44,11 +44,13 @@ register_def:
   byte_filter: str(required=False)
   enum: map(str,str,required=False)
   scale_factor: num(required=False)
-  ha_discovery: include('pollitem_ha_discovery',required=False)
+  ha_discovery: include('register_ha_discovery',required=False)
 ---
-pollitem_ha_discovery:
+register_ha_discovery:
+  # name and platform are the only 2 required fields:
   name: str()
-  platform: str(required=False)
+  platform: str()
+  # everything else is marked as optional but it maybe required for a particular platform
   device_class: str(required=False)
   icon: str(required=False)
   unit_of_measurement: str(required=False)

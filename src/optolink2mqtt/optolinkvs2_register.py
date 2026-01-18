@@ -102,7 +102,7 @@ class OptolinkVS2Register:
     # MQTT helpers
     #
 
-    def get_mqtt_topic(self) -> str:
+    def get_mqtt_state_topic(self) -> str:
         return f"{self.mqtt_base_topic}/{self.sanitized_name}"
 
     def get_mqtt_payload(self, rawdata: bytearray) -> str:
@@ -116,11 +116,6 @@ class OptolinkVS2Register:
         """
         Returns a reasonable-unique ID to be used inside HA discovery messages
         """
-
-        # concatenated = "".join([,])
-        # hash_object = hashlib.sha256(concatenated.encode())
-        # hash_hex = hash_object.hexdigest()
-        # return f"{device_name}-{self.task_name}-{hash_hex[:12]}"
         sanitized_address = self.address.to_bytes(2, "little").hex()
         return f"{device_name}-{self.sanitized_name}-{sanitized_address}"
 
@@ -132,34 +127,41 @@ class OptolinkVS2Register:
         default_expire_after: int,
     ) -> str:
         """
-        Returns an HomeAssistant MQTT discovery message associated with this task.
-        This method is only available for single-valued tasks, having their "ha_discovery" metadata
+        Returns an HomeAssistant MQTT discovery message associated with this register.
+        This method is only available for registers having their "ha_discovery" metadata
         populated in the configuration file.
         See https://www.home-assistant.io/integrations/mqtt/#discovery-messages
         """
         if self.ha_discovery is None:
             return None
 
-        # required parameters
+        # required parameters: name & platform
         if self.ha_discovery["name"] is None or self.ha_discovery["name"] == "":
             raise Exception(
                 f"Register '{self.name}' has invalid HA discovery 'name' property."
             )
+        if self.ha_discovery["platform"] is None or self.ha_discovery["platform"] == "":
+            raise Exception(
+                f"Register '{self.name}' has invalid HA discovery 'platform' property."
+            )
 
+        # basic MQTT discovery message structure:
         msg = {
+            "name": self.ha_discovery["name"],
             "device": device_dict,
             "origin": {
                 "name": "optolink2mqtt",
                 "sw": optolink2mqtt_ver,
                 "url": "https://github.com/f18m/viessmann-optolink2mqtt",
             },
+            # unique_id is required when used with device-based discovery
             "unique_id": self.get_ha_unique_id(device_name),
-            "state_topic": self.get_mqtt_topic(),
-            "name": self.ha_discovery["name"],
+            # the state topic is always populated as it's mandatory for all platforms
+            "state_topic": self.get_mqtt_state_topic(),
         }
 
-        # optional parameters
-        # FIXME: should we add also "availability_topic", "payload_available", "payload_not_available" ?
+        # parameters that are optionals from optolink2mqtt perspective:
+        # note that HomeAssistant might require some of them depending on the 'platform' used
         optional_parameters = [
             "icon",
             "device_class",
@@ -167,13 +169,21 @@ class OptolinkVS2Register:
             "unit_of_measurement",
             "payload_on",
             "payload_off",
+            "availability_topic",
+            "payload_available",
+            "payload_not_available",
         ]
         for o in optional_parameters:
             if o in self.ha_discovery and self.ha_discovery[o]:
                 msg[o] = self.ha_discovery[o]
 
-        if self.enum_dict is not None:
-            msg["options"] = list(self.enum_dict.values())
+        # options are populated only for 'select' platform with enum_dict defined
+        if (
+            self.ha_discovery["platform"] == "select"
+            or self.ha_discovery["platform"] == "sensor"
+        ):
+            if self.enum_dict is not None:
+                msg["options"] = list(self.enum_dict.values())
 
         # expire_after is populated with user preference or a meaningful default value:
         if self.ha_discovery["expire_after"]:
@@ -189,6 +199,10 @@ class OptolinkVS2Register:
         """
         # the topic shall be in format
         #   <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
+        # where
+        #   "component" is the platform (sensor, switch, select, number, etc.)
+        #   "node_id" is the name of the device that groups all the entities
+        #   "object_id" is an ID unique inside the component
         # see https://www.home-assistant.io/integrations/mqtt/#discovery-topic
         unique_id = self.get_ha_unique_id(device_name)
         return f"{ha_topic}/{self.ha_discovery['platform']}/{device_name}/{unique_id}/config"
