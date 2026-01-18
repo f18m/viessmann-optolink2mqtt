@@ -61,7 +61,7 @@ class Optolink2MqttApp:
         if rx_data.is_successful():
             # publish on MQTT
             app.mqtt_client.publish(
-                reg.get_mqtt_topic(), reg.get_mqtt_payload(rx_data.data)
+                reg.get_mqtt_state_topic(), reg.get_mqtt_payload(rx_data.data)
             )
         else:
             logging.error(

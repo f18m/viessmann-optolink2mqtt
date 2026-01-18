@@ -1,0 +1,191 @@
+"""
+ha_support.py
+----------------
+Home Assistant supported platforms, device classes, and state classes
+Copyright (C) 2026 Francesco Montorsi
+
+Licensed under the GNU GENERAL PUBLIC LICENSE, Version 3 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.gnu.org/licenses/gpl-3.0.html
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+HA_SUPPORTED_PLATFORMS = ["sensor", "binary_sensor", "select", "switch", "number"]
+HA_SUPPORTED_DEVICE_CLASSES = {
+    # see https://www.home-assistant.io/integrations/binary_sensor/#device-class
+    "binary_sensor": [
+        "battery",
+        "battery_charging",
+        "carbon_monoxide",
+        "cold",
+        "connectivity",
+        "door",
+        "garage_door",
+        "gas",
+        "heat",
+        "light",
+        "lock",
+        "moisture",
+        "motion",
+        "moving",
+        "occupancy",
+        "opening",
+        "plug",
+        "power",
+        "presence",
+        "problem",
+        "running",
+        "safety",
+        "smoke",
+        "sound",
+        "tamper",
+        "update",
+        "vibration",
+        "window",
+    ],
+    # see https://www.home-assistant.io/integrations/sensor/#device-class
+    "sensor": [
+        "date",
+        "enum",
+        "timestamp",
+        "apparent_power",
+        "aqi",
+        "area",
+        "atmospheric_pressure",
+        "battery",
+        "blood_glucose_concentration",
+        "carbon_monoxide",
+        "carbon_dioxide",
+        "conductivity",
+        "current",
+        "data_rate",
+        "data_size",
+        "distance",
+        "duration",
+        "energy",
+        "energy_storage",
+        "frequency",
+        "gas",
+        "humidity",
+        "illuminance",
+        "irradiance",
+        "moisture",
+        "monetary",
+        "nitrogen_dioxide",
+        "nitrogen_monoxide",
+        "nitrous_oxide",
+        "ozone",
+        "ph",
+        "pm1",
+        "pm10",
+        "pm25",
+        "power_factor",
+        "power",
+        "precipitation",
+        "precipitation_intensity",
+        "pressure",
+        "reactive_power",
+        "signal_strength",
+        "sound_pressure",
+        "speed",
+        "sulphur_dioxide",
+        "temperature",
+        "volatile_organic_compounds",
+        "volatile_organic_compounds_parts",
+        "voltage",
+        "volume",
+        "volume_storage",
+        "volume_flow_rate",
+        "water",
+        "weight",
+        "wind_speed",
+    ],
+    # select platform has NO device classes:
+    "select": [],
+    # see https://www.home-assistant.io/integrations/switch/#device-class
+    "switch": [
+        "outlet",
+        "switch",
+    ],
+    # see https://www.home-assistant.io/integrations/number/#device-class
+    "number": [
+        "absolute_humidity",
+        "apparent_power",
+        "aqi",
+        "area",
+        "atmospheric_pressure",
+        "battery",
+        "blood_glucose_concentration",
+        "carbon_dioxide",
+        "carbon_monoxide",
+        "current",
+        "data_rate",
+        "data_size",
+        "distance",
+        "duration",
+        "energy",
+        "energy_distance",
+        "energy_storage",
+        "frequency",
+        "gas",
+        "humidity",
+        "illuminance",
+        "irradiance",
+        "moisture",
+        "monetary",
+        "nitrogen_dioxide",
+        "nitrogen_monoxide",
+        "nitrous_oxide",
+        "ozone",
+        "ph",
+        "pm1",
+        "pm25",
+        "pm4",
+        "pm10",
+        "power_factor",
+        "power",
+        "precipitation",
+        "precipitation_intensity",
+        "pressure",
+        "reactive_energy",
+        "reactive_power",
+        "signal_strength",
+        "sound_pressure",
+        "speed",
+        "sulphur_dioxide",
+        "temperature",
+        "temperature_delta",
+        "volatile_organic_compounds",
+        "volatile_organic_compounds_parts",
+        "voltage",
+        "volume",
+        "volume_flow_rate",
+        "volume_storage",
+        "water",
+        "weight",
+        "wind_direction",
+        "wind_speed",
+    ],
+}
+
+# see https://developers.home-assistant.io/docs/core/entity/sensor/#long-term-statistics
+HA_SUPPORTED_STATE_CLASSES = ["measurement", "total", "total_increasing"]
+
+# see https://developers.home-assistant.io/docs/core/entity/sensor/#long-term-statistics
+HA_UNSUPPORTED_DEVICE_CLASSES_FOR_MEASUREMENTS = [
+    "date",
+    "enum",
+    "energy",
+    "gas",
+    "monetary",
+    "timestamp",
+    "volume",
+    "water",
+]
