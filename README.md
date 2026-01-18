@@ -97,7 +97,7 @@ with some metadata specific for each sensor, to get the sensor automatically app
 This makes it possible to build in your HomeAssistant dashboard visual representation of your Viessmann device.
 E.g.. for my heat pump I was able to build the following dashboard:
 
-<img title="HA dashboard" alt="HA dashboard" src="docs/home_assistant_dashboard1.png">
+<img title="HA dashboard" alt="HA dashboard" src="docs/home_assistant_dashboard2.png">
 
 
 ## Related projects
@@ -106,3 +106,5 @@ E.g.. for my heat pump I was able to build the following dashboard:
 * [Optolink Bridge](https://github.com/kristian/optolink-bridge/): inspired from the "Optolink Splitter"; requires you to own a VitoConnect device and allows you to setup a "man in the middle" device
 * [openv vcontrold](https://github.com/openv/vcontrold): seems abandoned but contains a C-based implementation of the VS1 and VS2 protocols apparently. Its [wiki](https://github.com/openv/openv/wiki/) has plenty of details although in German
 * [VitoWiFi](https://github.com/bertmelis/VitoWiFi): a C++ implementation of VS1 (KW) and VS2 (P300) Optolink protocols, for use on ESP microcontrollers but also Linux systems
+
+* [FloorHeatingController](https://github.com/f18m/floor-heating-controller): firmware for a controller of floor heating valves, to help replace physical thermostat with HomeAssistant virtual thermostats
