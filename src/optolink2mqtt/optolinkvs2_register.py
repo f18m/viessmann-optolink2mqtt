@@ -18,7 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 # import hashlib
 import json
@@ -33,41 +33,36 @@ class OptolinkVS2Register:
 
     def __init__(
         self,
-        name: str = "external_temperature",
-        sampling_period_sec: int = 1,
-        address: int = 0x0101,
-        length: int = 2,
-        signed: bool = False,
-        scale_factor: float = 1.0,
-        byte_filter: str = None,
-        enum_dict: Optional[Dict[int, str]] = None,
-        mqtt_base_topic: str = "",
-        ha_discovery: Optional[Dict[str, Any]] = None,
+        reg: Dict[str, Any],
+        mqtt_base_topic: str,
     ):
         # basic metadata
-        self.name = name
+        self.name = reg["name"]
         self.sanitized_name = self.name.strip().replace(" ", "_").lower()
-        self.sampling_period_sec = sampling_period_sec
+        self.sampling_period_sec = reg["sampling_period_seconds"]
         self.mqtt_base_topic = mqtt_base_topic
         if self.mqtt_base_topic.endswith("/"):
             self.mqtt_base_topic = self.mqtt_base_topic[:-1]
 
         # register definition
-        self.address = address
-        self.length = length
-        self.signed = signed
-        self.scale_factor = scale_factor
-        self.byte_filter = byte_filter
-        self.enum_dict = enum_dict
+        self.address = int(reg["register"])
+        self.length = int(reg["length"])
+        self.signed = bool(reg["signed"])
+        self.writable = bool(reg["writable"])
+        self.scale_factor = float(reg["scale_factor"])
+        self.byte_filter = str(reg["byte_filter"])
+        self.enum_dict = reg["enum"]
 
         # optional Home Assistant discovery configuration
-        self.ha_discovery = ha_discovery
+        self.ha_discovery = reg["ha_discovery"]
+        if self.ha_discovery is not None:
+            self.check_ha_discovery_validity()
 
     def get_human_readable_description(self) -> str:
         """
         Returns a human-readable description for this register
         """
-        return f"name=[{self.name}], addr=0x{self.address:04X}, len={self.length}, signed={self.signed}, scale={self.scale_factor}, byte_filter={self.byte_filter}, enum={self.enum_dict}"
+        return f"name=[{self.name}], addr=0x{self.address:04X}, len={self.length}, signed={self.signed}, scale={self.scale_factor}, byte_filter={self.byte_filter}, enum={self.enum_dict}, has HA discovery={self.ha_discovery is not None}"
 
     def get_next_occurrence_in_seconds(self) -> float:
         """
@@ -105,12 +100,46 @@ class OptolinkVS2Register:
     def get_mqtt_state_topic(self) -> str:
         return f"{self.mqtt_base_topic}/{self.sanitized_name}"
 
+    def get_mqtt_command_topic(self) -> str:
+        return f"{self.mqtt_base_topic}/{self.sanitized_name}/set"
+
     def get_mqtt_payload(self, rawdata: bytearray) -> str:
         return f"{self.get_value(rawdata)}"
 
     #
     # MQTT/HomeAssistant Discovery Message helpers
     #
+
+    def check_ha_discovery_validity(self) -> None:
+        """
+        Checks if HA discovery information are coherent with the register definition
+        """
+        # ensure ha_discovery is a dict
+        if not isinstance(self.ha_discovery, dict):
+            raise Exception(
+                f"Register '{self.name}' has invalid HA discovery configuration."
+            )
+
+        # required parameters: name & platform
+        if self.ha_discovery["name"] is None or self.ha_discovery["name"] == "":
+            raise Exception(
+                f"Register '{self.name}' has invalid HA discovery 'name' property."
+            )
+        if self.ha_discovery["platform"] is None or self.ha_discovery["platform"] == "":
+            raise Exception(
+                f"Register '{self.name}' has invalid HA discovery 'platform' property."
+            )
+
+        HA_PLATFORMS_WRITABLE = ["switch", "select", "number"]
+
+        if self.writable and self.ha_discovery["platform"] not in HA_PLATFORMS_WRITABLE:
+            raise Exception(
+                f"Register '{self.name}' is writable but has incompatible HA discovery 'platform' property '{self.ha_discovery['platform']}'."
+            )
+        if not self.writable and self.ha_discovery["platform"] in HA_PLATFORMS_WRITABLE:
+            raise Exception(
+                f"Register '{self.name}' is not writable but has incompatible HA discovery 'platform' property '{self.ha_discovery['platform']}'."
+            )
 
     def get_ha_unique_id(self, device_name: str) -> str:
         """
@@ -134,16 +163,6 @@ class OptolinkVS2Register:
         """
         if self.ha_discovery is None:
             return None
-
-        # required parameters: name & platform
-        if self.ha_discovery["name"] is None or self.ha_discovery["name"] == "":
-            raise Exception(
-                f"Register '{self.name}' has invalid HA discovery 'name' property."
-            )
-        if self.ha_discovery["platform"] is None or self.ha_discovery["platform"] == "":
-            raise Exception(
-                f"Register '{self.name}' has invalid HA discovery 'platform' property."
-            )
 
         # basic MQTT discovery message structure:
         msg = {
@@ -177,13 +196,17 @@ class OptolinkVS2Register:
             if o in self.ha_discovery and self.ha_discovery[o]:
                 msg[o] = self.ha_discovery[o]
 
-        # options are populated only for 'select' platform with enum_dict defined
+        # "options" field is populated only for "select" and "sensor" platform with enum_dict defined
         if (
             self.ha_discovery["platform"] == "select"
             or self.ha_discovery["platform"] == "sensor"
         ):
             if self.enum_dict is not None:
                 msg["options"] = list(self.enum_dict.values())
+
+        # "command_topic" is populated only for platforms that allow HomeAssistant to send commands / write values:
+        if self.writable:
+            msg["command_topic"] = self.get_mqtt_command_topic()
 
         # expire_after is populated with user preference or a meaningful default value:
         if self.ha_discovery["expire_after"]:

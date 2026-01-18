@@ -211,6 +211,10 @@ class Config:
     def _fill_defaults_register(self, reg: dict) -> dict:
         if "sampling_period_sec" not in reg:
             reg["sampling_period_sec"] = 1
+        if "signed" not in reg:
+            reg["signed"] = False
+        if "writable" not in reg:
+            reg["writable"] = False
         if "scale_factor" not in reg:
             reg["scale_factor"] = 1.0
         if "byte_filter" not in reg:

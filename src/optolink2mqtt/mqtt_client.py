@@ -37,6 +37,9 @@ class MqttClient:
     # Counter of total messages reaching the MqttClient.publish()
     num_published_total = 0
 
+    # Counter of total subscriptions made
+    num_subscriptions = 0
+
     # Constant value indicating the absence of a connection to the broker from get_connection_id()
     CONN_ID_INVALID = 0
 
@@ -132,15 +135,32 @@ class MqttClient:
             return True
         return False
 
-    # FIXME: change this signature to allow batch-sending multiple messages
     def publish(self, topic: str, payload: str) -> None:
         """
         Publish a message to the MQTT broker
         """
         logging.debug("MqttClient.publish on [%s] value [%s]", topic, payload)
         MqttClient.num_published_total += 1
+
+        # NOTE: we simplify the code by ignoring the returned MQTTMessageInfo object...
+        # in case of problems, the on_publish() callback will not be called
+        # and the user will see a mismatch between num_published_total and
+        # num_published_successful
         self._mqttc.publish(topic, payload, qos=self.qos, retain=self.retain)
         return
+
+    def subscribe(self, topic: str) -> bool:
+        """
+        Subscribe to a topic on the MQTT broker
+        """
+        logging.debug("MqttClient.subscribe on [%s]", topic)
+        ret = self._mqttc.subscribe(topic, self.qos)
+        if ret[0] != paho.MQTT_ERR_SUCCESS:
+            logging.error(f"Error subscribing to topic '{topic}': return code {ret[0]}")
+            return False
+
+        MqttClient.num_subscriptions += 1
+        return True
 
     def loop_start(self) -> None:
         """
@@ -192,7 +212,7 @@ class MqttClient:
 
     # ---------------------------------------------------------------------------- #
     #                                   Callbacks                                  #
-    # These will execute in the Paho secondary thread startd via loop_start()      #
+    # These will execute in the Paho secondary thread started via loop_start()     #
     # ---------------------------------------------------------------------------- #
 
     def on_connect(
