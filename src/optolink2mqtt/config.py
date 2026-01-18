@@ -150,6 +150,14 @@ class Config:
             validated_registers.append(self._fill_defaults_register(reg))
         self.config["registers_poll_list"] = validated_registers
 
+        # additional coherency check:
+        # the same register address can be present only once:
+        reg_addresses = [r["register"] for r in self.config["registers_poll_list"]]
+        if len(reg_addresses) != len(set(reg_addresses)):
+            raise ValueError(
+                f"Configuration file '{filename}' is invalid: the same register address is present more than once in 'registers_poll_list'"
+            )
+
         logging.info(
             f"Configuration file '{filename}' successfully loaded and validated against schema. It contains {len(self.config['registers_poll_list'])} registers to sample/poll."
         )
