@@ -31,11 +31,26 @@ the cloud of any vendor.
 
 <img title="Setup" alt="Architecture" src="docs/architecture.png">
 
-## Hardware
+## Hardware Required
 
 * A Single Board Computer (SBC) which is capable of running Python and has a USB-A connector
   (if you plan to use the original Viessmann Optolink USB cable). A typical choice is the [Raspberry](https://www.raspberrypi.com/products/raspberry-pi-5/); myself I've been using the [OLinuXino A64](https://www.olimex.com/Products/OLinuXino/A64/A64-OLinuXino/) as (slightly cheaper) alternative.
 * The Optolink USB cable to read/write; you have two main options: a) buy the original Viessmann cable on specialized shops such as [https://www.loebbeshop.de/](https://www.loebbeshop.de/); see exact item [here](https://www.loebbeshop.de/viessmann/ersatzteil/anschlussleitung-usb-optolink-fuer-vitoconnetc-artikel-7856059/) or b) build your own cable, more details available from other tinkerers like [MyVitotronicLogger](https://github.com/Ixtalo/MyVitotronicLogger) or at [Optolink splitter readme](https://github.com/philippoo66/optolink-splitter)
+
+
+## Software features
+
+This project main features are:
+
+* Written to be reliable and run 24/7: careful exception handling, reconnects automatically to the MQTT broker in case of transient network issues, etc.
+* One-file configuration: configure all aspects of your Viessmann device from a single YAML config file (easy to backup and/or version in git); no need to hand-write HomeAssistant MQTT entity definitions!
+* Read and write support: allows both to read from your Viessmann device and also to set writable registers to e.g. change heating mode, change target temperatures, etc.
+* HomeAssistant friendly: although this project can be used with _any_ home automation platform; it provides a number of features that make it very HomeAssistant friendly: in particular MQTT discovery messages make it possible to magically have all your Viessmann entities appear in HomeAssistant.
+* Easy installation via Pypi and docker
+
+What this project does NOT have at this time:
+* Compatibility with the VitoConnect: if you are interested in that I suggest you to look at the [Optolink Splitter](https://github.com/philippoo66/optolink-splitter) or [Optolink Bridge](https://github.com/kristian/optolink-bridge/)
+
 
 ## Installation
 
@@ -69,7 +84,7 @@ docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
 docker logs -f optolink2mqtt
 ```
 
-Please note that the `--restart=unless-stopped` makes sure that the optolink2mqtt will 
+Please note that the `--restart=unless-stopped` makes sure that the optolink2mqtt docker will 
 be restarted after a reboot.
 
 The docker image of optolink2mqtt supports 3 main architectures: `amd64`, `armv7` and `arm64`.
