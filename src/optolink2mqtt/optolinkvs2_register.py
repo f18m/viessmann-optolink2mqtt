@@ -44,7 +44,7 @@ class OptolinkVS2Register:
     ):
         # basic metadata
         self.name = reg["name"]
-        self.sanitized_name = self.name.strip().replace(" ", "_").lower()
+        self.sanitized_name = self._sanitize_name(self.name)
         self.sampling_period_sec = reg["sampling_period_seconds"]
         self.mqtt_base_topic = mqtt_base_topic
         if self.mqtt_base_topic.endswith("/"):
@@ -63,6 +63,36 @@ class OptolinkVS2Register:
         self.ha_discovery = reg["ha_discovery"]
         if self.ha_discovery is not None:
             self.check_ha_discovery_validity()
+
+    def _sanitize_name(self, name: str) -> str:
+        """
+        Returns a sanitized version of the given name, suitable to be used as MQTT topic part
+        or HomeAssistant unique ID part.
+        """
+        sanitized = name.lower()
+        sanitized = sanitized.replace(" ", "_")
+        sanitized = sanitized.replace("-", "_")
+        sanitized = sanitized.replace("/", "_")
+        sanitized = sanitized.replace("\\", "_")
+        sanitized = sanitized.replace(".", "_")
+        sanitized = sanitized.replace(",", "_")
+        sanitized = sanitized.replace(";", "_")
+        sanitized = sanitized.replace(":", "_")
+        sanitized = sanitized.replace("(", "")
+        sanitized = sanitized.replace(")", "")
+        sanitized = sanitized.replace("[", "")
+        sanitized = sanitized.replace("]", "")
+        sanitized = sanitized.replace("{", "")
+        sanitized = sanitized.replace("}", "")
+        sanitized = sanitized.replace('"', "")
+        sanitized = sanitized.replace("'", "")
+
+        sanitized = sanitized.replace("__", "_")
+        sanitized = sanitized.strip("_")
+
+        # ensure only ASCII characters are present
+        sanitized = sanitized.encode("ascii", errors="ignore").decode("ascii")
+        return sanitized
 
     def get_human_readable_description(self) -> str:
         """

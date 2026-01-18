@@ -53,10 +53,10 @@ class TestOptolinkVS2RegisterInit:
         """Test that register names are properly sanitized"""
         test_cases = [
             ("Test Register", "test_register"),
-            ("  Spaced  Out  ", "spaced__out"),
+            ("  Spaced  Out  ", "spaced_out"),
             ("UPPERCASE NAME", "uppercase_name"),
             ("Mixed Case_Name", "mixed_case_name"),
-            ("Name-With-Dashes", "name-with-dashes"),
+            ("Name-With-Dashes", "name_with_dashes"),
         ]
 
         for original, expected in test_cases:
@@ -184,3 +184,104 @@ class TestOptolinkVS2RegisterMQTT:
         reg = OptolinkVS2Register(reg_data, "home/device/")
 
         assert reg.get_mqtt_state_topic() == "home/device/test_parameter"
+
+
+class TestOptolinkVS2RegisterEdgeCases:
+    """Tests for edge cases and special scenarios"""
+
+    def test_single_byte_register(self):
+        """Test handling of single-byte register"""
+        reg_data = {
+            "name": "Byte Value",
+            "sampling_period_seconds": 60,
+            "register": 0x0000,
+            "length": 1,
+            "signed": False,
+            "writable": False,
+            "scale_factor": 1.0,
+            "byte_filter": None,
+            "enum": None,
+            "ha_discovery": None,
+        }
+        reg = OptolinkVS2Register(reg_data, "home/device")
+
+        assert reg.get_value_from_rawdata(bytearray([0xFF])) == 255
+        assert reg.get_rawdata_from_value("255") == bytearray([0xFF])
+
+    def test_multi_byte_register(self):
+        """Test handling of multi-byte register (8 bytes)"""
+        reg_data = {
+            "name": "Large Value",
+            "sampling_period_seconds": 60,
+            "register": 0x0000,
+            "length": 8,
+            "signed": False,
+            "writable": False,
+            "scale_factor": 1.0,
+            "byte_filter": None,
+            "enum": None,
+            "ha_discovery": None,
+        }
+        reg = OptolinkVS2Register(reg_data, "home/device")
+
+        rawdata = bytearray([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])
+        value = reg.get_value_from_rawdata(rawdata)
+        assert value == 0x0807060504030201
+
+    def test_zero_scale_factor(self):
+        """Test handling of zero value reading"""
+        reg_data = {
+            "name": "Zero Value",
+            "sampling_period_seconds": 60,
+            "register": 0x0000,
+            "length": 2,
+            "signed": False,
+            "writable": False,
+            "scale_factor": 1.0,
+            "byte_filter": None,
+            "enum": None,
+            "ha_discovery": None,
+        }
+        reg = OptolinkVS2Register(reg_data, "home/device")
+
+        assert reg.get_value_from_rawdata(bytearray([0x00, 0x00])) == 0
+
+    def test_large_scale_factor(self):
+        """Test handling of large scale factor"""
+        reg_data = {
+            "name": "Large Scale",
+            "sampling_period_seconds": 60,
+            "register": 0x0000,
+            "length": 2,
+            "signed": False,
+            "writable": False,
+            "scale_factor": 100.0,
+            "byte_filter": None,
+            "enum": None,
+            "ha_discovery": None,
+        }
+        reg = OptolinkVS2Register(reg_data, "home/device")
+
+        # 5 * 100.0 = 500.0
+        rawdata = bytearray([0x05, 0x00])
+        value = reg.get_value_from_rawdata(rawdata)
+        assert value == 500.0
+
+    def test_special_characters_in_name(self):
+        """Test handling of special characters in register name"""
+        reg_data = {
+            "name": "Flow (°C) / Return-Temp.",
+            "sampling_period_seconds": 60,
+            "register": 0x0000,
+            "length": 2,
+            "signed": False,
+            "writable": False,
+            "scale_factor": 1.0,
+            "byte_filter": None,
+            "enum": None,
+            "ha_discovery": None,
+        }
+        reg = OptolinkVS2Register(reg_data, "home/device")
+
+        # Special characters should be preserved or handled correctly
+        assert reg.sanitized_name == "flow_c__return_temp"
