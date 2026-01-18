@@ -100,6 +100,19 @@ E.g.. for my heat pump I was able to build the following dashboard:
 <img title="HA dashboard" alt="HA dashboard" src="docs/home_assistant_dashboard2.png">
 
 
+## Labelling of the HW
+
+Most likely your Viessmann device will stay around for a lot of time (many years hopefully), 
+and so will do the SBC that connects it to your home automation platform.
+For this reason I suggest to provide some documentation for what is running on your SBC.
+A simple approach I like is to print a QR code pointing at this page and stick it physically on the SBC,
+to make it obvious to anybody inspecting it where to find the docs.
+
+Here you can find a QR code I produced with the optimal [miniQR code generator](https://mini-qr-code-generator.vercel.app/):
+
+<img title="QRCode" alt="QRCode" src="docs/qr-code.png">
+
+
 ## Related projects
 
 * [Optolink Splitter](https://github.com/philippoo66/optolink-splitter): this is the original project that inspired this one
