@@ -6,13 +6,12 @@ Reworked by Francesco Montorsi based on the original code by philippoo66
 by making it object-oriented and easier to integrate in other projects,
 decoupling from MQTT and remoing references to global variables.
 
-TODO: collect return codes in an Enum
-TODO: replace hardcoded protocol constants with named constants
 TODO: add stats for errors, timeouts, retries, etc.
 
 ----------------
 
 Copyright 2024 philippoo66
+Copyright 2023 sarnau
 
 Licensed under the GNU GENERAL PUBLIC LICENSE, Version 3 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,6 +29,92 @@ limitations under the License.
 import time
 import serial
 import logging
+import enum
+
+#
+# Constants
+#
+# See also https://github.com/sarnau/InsideViessmannVitosoft/blob/main/Viessmann2MQTT.py
+# for some of these
+
+
+class ReceiveState(enum.IntEnum):
+    unknown = 0
+    ENQ = 1
+    ACK = 2
+    NACK = 3
+
+
+class MessageIdentifier(enum.IntEnum):
+    RequestMessage = 0
+    ResponseMessage = 1
+    UNACKDMessage = 2
+    ErrorMessage = 3
+
+
+class FunctionCodes(enum.IntEnum):
+    undefined = 0
+    Virtual_READ = 1
+    Virtual_WRITE = 2
+    Physical_READ = 3
+    Physical_WRITE = 4
+    EEPROM_READ = 5
+    EEPROM_WRITE = 6
+    Remote_Procedure_Call = 7
+    Virtual_MBUS = 33
+    Virtual_MarktManager_READ = 34
+    Virtual_MarktManager_WRITE = 35
+    Virtual_WILO_READ = 36
+    Virtual_WILO_WRITE = 37
+    XRAM_READ = 49
+    XRAM_WRITE = 50
+    Port_READ = 51
+    Port_WRITE = 52
+    BE_READ = 53
+    BE_WRITE = 54
+    KMBUS_RAM_READ = 65
+    KMBUS_EEPROM_READ = 67
+    KBUS_DATAELEMENT_READ = 81
+    KBUS_DATAELEMENT_WRITE = 82
+    KBUS_DATABLOCK_READ = 83
+    KBUS_DATABLOCK_WRITE = 84
+    KBUS_TRANSPARENT_READ = 85
+    KBUS_TRANSPARENT_WRITE = 86
+    KBUS_INITIALISATION_READ = 87
+    KBUS_INITIALISATION_WRITE = 88
+    KBUS_EEPROM_LT_READ = 89
+    KBUS_EEPROM_LT_WRITE = 90
+    KBUS_CONTROL_WRITE = 91
+    KBUS_MEMBERLIST_READ = 93
+    KBUS_MEMBERLIST_WRITE = 94
+    KBUS_VIRTUAL_READ = 95
+    KBUS_VIRTUAL_WRITE = 96
+    KBUS_DIRECT_READ = 97
+    KBUS_DIRECT_WRITE = 98
+    KBUS_INDIRECT_READ = 99
+    KBUS_INDIRECT_WRITE = 100
+    KBUS_GATEWAY_READ = 101
+    KBUS_GATEWAY_WRITE = 102
+    PROZESS_WRITE = 120
+    PROZESS_READ = 123
+    OT_Physical_Read = 180
+    OT_Virtual_Read = 181
+    OT_Physical_Write = 182
+    OT_Virtual_Write = 183
+    GFA_READ = 201
+    GFA_WRITE = 202
+
+
+class ReceiveCode(enum.IntEnum):
+    Success = 0x01
+    ErrorMessage = 0x03
+    NACK = 0x15
+    Byte0UnknownError = 0x20
+    STXError = 0x41
+    HandleLost = 0xAA
+    PacketLengthError = 0xFD
+    CRCError = 0xFE
+    Timeout = 0xFF
 
 
 class OptolinkVS2RxData:
@@ -37,17 +122,8 @@ class OptolinkVS2RxData:
     OptolinkVS2RxData holds a VS2 telegram received over Optolink interface,
     plus some extra attribute:
 
-    1. **ReturnCode (int)**
-        Receive status code:
-        - 0x01 = Success
-        - 0x03 = Error message
-        - 0x15 = NACK
-        - 0x20 = Byte0 unknown error
-        - 0x41 = STX error
-        - 0xAA = Handle lost
-        - 0xFD = Packet length error
-        - 0xFE = CRC error
-        - 0xFF = Timeout
+    1. **ReturnCode (ReceiveCode)**
+        Receive status code, see ReceiveCode enum
 
     2. **Addr (int)**
         Address of the data point.
@@ -56,13 +132,13 @@ class OptolinkVS2RxData:
         Payload data of the received telegram.
     """
 
-    def __init__(self, return_code: int, address: int, data: bytearray):
+    def __init__(self, return_code: ReceiveCode, address: int, data: bytearray):
         self.return_code = return_code
         self.address = address
         self.data = data
 
     def is_successful(self) -> bool:
-        return self.return_code == 0x01
+        return self.return_code == ReceiveCode.Success
 
 
 class OptolinkVS2Protocol:
@@ -114,7 +190,7 @@ class OptolinkVS2Protocol:
             if buff and buff[0] == 0x05:  # ENQ
                 break
         else:
-            logging.error("VS2: Timeout waiting for 0x05")
+            logging.error("VS2: Timeout waiting for ENQ 0x05")
             return False
 
         self.ser.reset_input_buffer()
@@ -148,8 +224,8 @@ class OptolinkVS2Protocol:
         outbuff = bytearray(8)
         outbuff[0] = 0x41  # 0x41 frame start
         outbuff[1] = 0x05  # Len Payload
-        outbuff[2] = 0x00  # 0x00 Request Message
-        outbuff[3] = 0x01  # Virtual_READ
+        outbuff[2] = MessageIdentifier.RequestMessage  # 0x00 Request Message
+        outbuff[3] = FunctionCodes.Virtual_READ  # Virtual_READ
         outbuff[4] = (addr >> 8) & 0xFF  # hi byte
         outbuff[5] = addr & 0xFF  # lo byte
         outbuff[6] = rdlen  # how many bytes to read
@@ -170,8 +246,8 @@ class OptolinkVS2Protocol:
         outbuff = bytearray(wrlen + 8)
         outbuff[0] = 0x41
         outbuff[1] = 5 + wrlen
-        outbuff[2] = 0x00
-        outbuff[3] = 0x02  # Virtual_WRITE
+        outbuff[2] = MessageIdentifier.RequestMessage
+        outbuff[3] = FunctionCodes.Virtual_WRITE  # Virtual_WRITE
         outbuff[4] = (addr >> 8) & 0xFF
         outbuff[5] = addr & 0xFF
         outbuff[6] = wrlen
@@ -261,7 +337,7 @@ class OptolinkVS2Protocol:
                     if self.ser2:
                         self.ser2.write(inbytes)
             except Exception:
-                return OptolinkVS2RxData(0xAA, 0, retdata)
+                return OptolinkVS2RxData(ReceiveCode.HandleLost, 0, retdata)
 
             if state == 0:
                 if not resptelegr:
@@ -277,12 +353,16 @@ class OptolinkVS2Protocol:
                     elif inbuff[0] == 0x15:  # VS2_NACK
                         logging.error("VS2 NACK Error")
                         return OptolinkVS2RxData(
-                            0x15, addr, alldata if not raw else bytearray(alldata)
+                            ReceiveCode.NACK,
+                            addr,
+                            alldata if not raw else bytearray(alldata),
                         )
                     else:
                         logging.error("VS2 unknown first byte error")
                         return OptolinkVS2RxData(
-                            0x20, addr, alldata if not raw else bytearray(alldata)
+                            ReceiveCode.Byte0UnknownError,
+                            addr,
+                            alldata if not raw else bytearray(alldata),
                         )
 
                     # Separate the first byte
@@ -298,7 +378,9 @@ class OptolinkVS2Protocol:
                     logging.error(f"VS2 STX Error: {inbuff.hex()}")
                     # It might be necessary to wait for any remaining part of the telegram.
                     return OptolinkVS2RxData(
-                        0x41, addr, alldata if not raw else bytearray(alldata)
+                        ReceiveCode.STXError,
+                        addr,
+                        alldata if not raw else bytearray(alldata),
                     )
                 state = 2
 
@@ -307,7 +389,9 @@ class OptolinkVS2Protocol:
                 if pllen < 5:  # protocol_Id + MsgId|FnctCode + AddrHi + AddrLo + BlkLen
                     logging.error(f"VS2 Len Error: {pllen}")
                     return OptolinkVS2RxData(
-                        0xFD, addr, alldata if not raw else bytearray(alldata)
+                        ReceiveCode.PacketLengthError,
+                        addr,
+                        alldata if not raw else bytearray(alldata),
                     )
                 if len(inbuff) >= pllen + 3:  # STX + Len + Payload + CRC
 
@@ -316,7 +400,7 @@ class OptolinkVS2Protocol:
 
                     # receive complete
                     inbuff = inbuff[: pllen + 4]  # make sure no tailing trash
-                    # msgid = inbuff[2]
+                    msgid = inbuff[2] & 0x0F
                     # msqn = (inbuff[3] & 0xE0) >> 5
                     # fctcd = inbuff[3] & 0x1F
                     addr = (inbuff[4] << 8) + inbuff[5]
@@ -329,15 +413,19 @@ class OptolinkVS2Protocol:
                             f"VS2 CRC Error: expected=0x{expected_crc:02X} received=0x{inbuff[-1]:02X}"
                         )
                         return OptolinkVS2RxData(
-                            0xFE, addr, retdata if not raw else bytearray(alldata)
+                            ReceiveCode.CRCError,
+                            addr,
+                            retdata if not raw else bytearray(alldata),
                         )
 
-                    if inbuff[2] & 0x0F == 0x03:
+                    if msgid == MessageIdentifier.ErrorMessage:
                         logging.error(
                             f"VS2 Error: dlen={dlen} content[hex]={retdata.hex()}"
                         )
                         return OptolinkVS2RxData(
-                            0x03, addr, retdata if not raw else bytearray(alldata)
+                            ReceiveCode.ErrorMessage,
+                            addr,
+                            retdata if not raw else bytearray(alldata),
                         )
 
                     # successful receive!
@@ -345,18 +433,24 @@ class OptolinkVS2Protocol:
                         f"VS2 received successfully: address=0x{addr:02X} length={dlen} content[hex]={retdata.hex()}"
                     )
                     return OptolinkVS2RxData(
-                        0x01, addr, retdata if not raw else bytearray(alldata)
+                        ReceiveCode.Success,
+                        addr,
+                        retdata if not raw else bytearray(alldata),
                     )
 
         # timed-out if we get here
 
-        return OptolinkVS2RxData(0xFF, addr, retdata if not raw else bytearray(retdata))
+        return OptolinkVS2RxData(
+            ReceiveCode.Timeout, addr, retdata if not raw else bytearray(retdata)
+        )
 
     # ------------------------------------------------------------------
     # Raw receive
     # ------------------------------------------------------------------
 
-    def receive_fullraw(self, eot_time: float, timeout: float) -> tuple[int, bytearray]:
+    def receive_fullraw(
+        self, eot_time: float, timeout: float
+    ) -> tuple[ReceiveCode, bytearray]:
         inbuff = b""
         start = time.time()
         last_rx = start
@@ -371,10 +465,10 @@ class OptolinkVS2Protocol:
                     self.ser2.write(inbytes)
             elif inbuff and (time.time() - last_rx) > eot_time:
                 # if data received and no further receive since more than eot_time
-                return 0x01, bytearray(inbuff)
+                return ReceiveCode.Success, bytearray(inbuff)
 
             if (time.time() - start) > timeout:
-                return 0xFF, bytearray(inbuff)
+                return ReceiveCode.Timeout, bytearray(inbuff)
 
             time.sleep(0.005)
 
