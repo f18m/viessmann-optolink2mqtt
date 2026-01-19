@@ -253,6 +253,7 @@ class OptolinkVS2Register:
             "device_class",
             "state_class",
             "unit_of_measurement",
+            "entity_category",
             "payload_on",
             "payload_off",
             "availability_topic",

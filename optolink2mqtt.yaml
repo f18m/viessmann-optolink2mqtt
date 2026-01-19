@@ -131,6 +131,27 @@ registers_poll_list:
       name: "Heating Circuit 1 Mode"
       platform: sensor
       device_class: enum
+      entity_category: config
+  
+  # another register example, showing a writable target temperature:
+
+  - name: dhw_temperature_set
+    sampling_period_seconds: 600
+    register: 0x6000
+    length: 2
+    scale_factor: 0.1
+    writable: true
+    ha_discovery:
+      name: "Domestic Hot Water Set Temperature"
+      platform: number
+      device_class: temperature
+      entity_category: config
+      unit_of_measurement: "°C"
+      min: 20
+      max: 60
+      step: 1
+      mode: "box"
+      optimistic: false
 
 
   # another register example, showing a binary_sensor of type "running":
