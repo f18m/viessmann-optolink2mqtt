@@ -121,7 +121,9 @@ class ErrorCode(enum.IntEnum):
     LastRXError = 9
 
     # Possible TX errors:
+    FirstTXError = 10
     WriteFailure = 10
+    LastTXError = 10
 
     LastValue = 10
 
@@ -524,9 +526,20 @@ class OptolinkVS2Protocol:
             ret += self.stats_by_receive_code[i]
         return ret
 
+    def get_total_errors(self) -> int:
+        ret = 0
+        # sum RX errors:
+        for i in range(ErrorCode.FirstRXError, ErrorCode.LastRXError):
+            ret += self.stats_by_receive_code[i]
+        # sum TX errors:
+        for i in range(ErrorCode.FirstTXError, ErrorCode.LastTXError):
+            ret += self.stats_by_receive_code[i]
+        return ret
+
     def get_human_friendly_stats(self) -> str:
         total = self.get_total_rx_frames()
         success_perc = (
             100.0 * float(self.stats_by_receive_code[ErrorCode.Success]) / float(total)
         )
-        return f"correct frames received: {self.stats_by_receive_code[ErrorCode.Success]}/{total} ({success_perc:0.1f}%)"
+        status = f"{success_perc:0.1f}% of {total} Optolink VS2 frames correctly decoded"
+        return status
