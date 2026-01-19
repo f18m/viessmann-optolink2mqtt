@@ -55,6 +55,17 @@ class Optolink2MqttApp:
         # dict of OptolinkVS2Register instances keyed by their COMMAND TOPIC
         self.register_list_by_cmd_topic = {}
 
+    def log_status(self) -> None:
+        """
+        Logs summary of how well this app is running.
+        """
+
+        logging.info(
+            f"optolink2mqtt status: "
+            f"{self.mqtt_client.get_human_friendly_stats()}"
+            f"{self.optolink_interface.get_human_friendly_stats()}"
+        )
+
     @staticmethod
     def on_schedule_timer(app: "Optolink2MqttApp", reg: OptolinkVS2Register) -> None:
         """
@@ -88,19 +99,15 @@ class Optolink2MqttApp:
         return
 
     @staticmethod
-    def log_status() -> None:
-        # TODO: add stats from VS2 interface
-        logging.info(
-            f"optolink2mqtt status: {MqttClient.num_disconnects} MQTT disconnections; {MqttClient.num_published_successful}/{MqttClient.num_published_total} successful/total MQTT messages published; {MqttClient.num_received_messages} MQTT messages received from subscribed topics"
-        )
-
-    @staticmethod
     def on_log_timer(app: "Optolink2MqttApp") -> None:
         """
         Periodically prints the status of optolink2mqtt
         """
 
-        new_status = MqttClient.num_disconnects
+        new_status = (
+            MqttClient.num_disconnects,
+            app.optolink_interface.get_total_rx_frames(),
+        )
         if new_status != app.last_logged_status:
             # publish status on MQTT
             status_topic = app.mqtt_client.get_optolink2mqtt_status_topic()
@@ -109,7 +116,7 @@ class Optolink2MqttApp:
             )
 
             # publish status on log
-            Optolink2MqttApp.log_status()
+            app.log_status()
 
             app.last_logged_status = new_status
 
@@ -521,7 +528,7 @@ class Optolink2MqttApp:
         self.mqtt_client.loop_stop()
 
         # log status one last time
-        Optolink2MqttApp.log_status()
+        self.log_status()
 
         logging.warning("Exiting gracefully")
 

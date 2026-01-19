@@ -222,6 +222,14 @@ class MqttClient:
         """
         return self.topic_prefix + MqttClient.OPTOLINK2MQTT_STATUS_TOPIC
 
+    def get_human_friendly_stats(self) -> str:
+        status = (
+            f"{MqttClient.num_disconnects} MQTT disconnections; "
+            f"{MqttClient.num_published_successful}/{MqttClient.num_published_total} successful/total MQTT messages published; "
+            f"{MqttClient.num_received_messages} MQTT messages received from subscribed topics; "
+        )
+        return status
+
     # ---------------------------------------------------------------------------- #
     #                                   Callbacks                                  #
     # These will execute in the Paho secondary thread started via loop_start()     #
