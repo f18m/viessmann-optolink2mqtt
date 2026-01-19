@@ -6,8 +6,6 @@ Reworked by Francesco Montorsi based on the original code by philippoo66
 by making it object-oriented and easier to integrate in other projects,
 decoupling from MQTT and remoing references to global variables.
 
-TODO: add stats for errors, timeouts, retries, etc.
-
 ----------------
 
 Copyright 2024 philippoo66
@@ -105,16 +103,27 @@ class FunctionCodes(enum.IntEnum):
     GFA_WRITE = 202
 
 
-class ReceiveCode(enum.IntEnum):
-    Success = 0x01
-    ErrorMessage = 0x03
-    NACK = 0x15
-    Byte0UnknownError = 0x20
-    STXError = 0x41
-    HandleLost = 0xAA
-    PacketLengthError = 0xFD
-    CRCError = 0xFE
-    Timeout = 0xFF
+class ErrorCode(enum.IntEnum):
+    Success = 1
+
+    # Possible RX errors:
+    # please note that an ErrorMessage may be returned in a number of cases like:
+    # attempt to read/write an invalid address; attempt to read/write an invalid number of bytes
+    FirstRXError = 2
+    ErrorMessage = 2
+    NACK = 3
+    Byte0UnknownError = 4
+    STXError = 5
+    SerialPortError = 6
+    LengthError = 7
+    CRCError = 8
+    Timeout = 9
+    LastRXError = 9
+
+    # Possible TX errors:
+    WriteFailure = 10
+
+    LastValue = 10
 
 
 class OptolinkVS2RxData:
@@ -122,8 +131,8 @@ class OptolinkVS2RxData:
     OptolinkVS2RxData holds a VS2 telegram received over Optolink interface,
     plus some extra attribute:
 
-    1. **ReturnCode (ReceiveCode)**
-        Receive status code, see ReceiveCode enum
+    1. **ErrorCode**
+        Receive status code, see ErrorCode enum
 
     2. **Addr (int)**
         Address of the data point.
@@ -132,13 +141,13 @@ class OptolinkVS2RxData:
         Payload data of the received telegram.
     """
 
-    def __init__(self, return_code: ReceiveCode, address: int, data: bytearray):
-        self.return_code = return_code
+    def __init__(self, receive_code: ErrorCode, address: int, data: bytearray):
+        self.receive_code = receive_code
         self.address = address
         self.data = data
 
     def is_successful(self) -> bool:
-        return self.return_code == ReceiveCode.Success
+        return self.receive_code == ErrorCode.Success
 
 
 class OptolinkVS2Protocol:
@@ -171,6 +180,9 @@ class OptolinkVS2Protocol:
         self.ser2 = ser2
         self.show_opto_rx = show_opto_rx
 
+        # local stats array/list
+        self.stats_by_receive_code = [0] * ErrorCode.LastValue
+
     # ------------------------------------------------------------------
     # Initialization
     # ------------------------------------------------------------------
@@ -186,7 +198,7 @@ class OptolinkVS2Protocol:
             time.sleep(0.1)
             buff = self.ser.read(1)
             if self.show_opto_rx:
-                logging.debug(buff)
+                logging.debug(f"VS2 received during INIT: {buff}")
             if buff and buff[0] == 0x05:  # ENQ
                 break
         else:
@@ -203,7 +215,7 @@ class OptolinkVS2Protocol:
             time.sleep(0.1)
             buff = self.ser.read(1)
             if self.show_opto_rx:
-                logging.debug(buff)
+                logging.debug(f"VS2 received during INIT: {buff}")
             if buff and buff[0] == 0x06:  # ACK
                 logging.info("VS2 Protocol initialized successfully")
                 return True
@@ -219,6 +231,10 @@ class OptolinkVS2Protocol:
     # def read_datapoint(self, addr: int, rdlen: int) -> bytes:
     #     rxdata = self.read_datapoint_ext(addr, rdlen)
     #     return rxdata.data
+    # deprecated because does not return error code
+    # def write_datapoint(self, addr: int, data: bytes) -> bool:
+    #     retcode, _, _ = self.write_datapoint_ext(addr, data)
+    #     return retcode == 0x01
 
     def read_datapoint_ext(self, addr: int, rdlen: int) -> OptolinkVS2RxData:
         outbuff = bytearray(8)
@@ -232,14 +248,11 @@ class OptolinkVS2Protocol:
         outbuff[7] = self.calc_crc(outbuff)
 
         self.ser.reset_input_buffer()
-        self.ser.write(outbuff)
+        if self.ser.write(outbuff) != len(outbuff):
+            self.stats_by_receive_code[ErrorCode.WriteFailure] += 1
+            return OptolinkVS2RxData(ErrorCode.WriteFailure, addr, bytearray())
 
         return self.receive_telegram(resptelegr=True, raw=False)
-
-    # deprecated because does not return error code
-    # def write_datapoint(self, addr: int, data: bytes) -> bool:
-    #     retcode, _, _ = self.write_datapoint_ext(addr, data)
-    #     return retcode == 0x01
 
     def write_datapoint_ext(self, addr: int, data: bytes) -> OptolinkVS2RxData:
         wrlen = len(data)
@@ -256,7 +269,9 @@ class OptolinkVS2Protocol:
         outbuff[7 + wrlen] = self.calc_crc(outbuff)
 
         self.ser.reset_input_buffer()
-        self.ser.write(outbuff)
+        if self.ser.write(outbuff) != len(outbuff):
+            self.stats_by_receive_code[ErrorCode.WriteFailure] += 1
+            return OptolinkVS2RxData(ErrorCode.WriteFailure, addr, bytearray())
 
         return self.receive_telegram(resptelegr=True, raw=False)
 
@@ -281,10 +296,12 @@ class OptolinkVS2Protocol:
         outbuff[7 : 7 + len(data)] = data
         outbuff[-1] = self.calc_crc(outbuff)
 
-        logging.debug(OptolinkVS2Protocol.readable_hex(outbuff))
+        logging.debug(f"VS2: sending {outbuff.hex()}")
 
         self.ser.reset_input_buffer()
-        self.ser.write(outbuff)
+        if self.ser.write(outbuff) != len(outbuff):
+            self.stats_by_receive_code[ErrorCode.WriteFailure] += 1
+            return OptolinkVS2RxData(ErrorCode.WriteFailure, addr, bytearray())
 
         return self.receive_telegram(resptelegr=True, raw=False)
 
@@ -337,7 +354,8 @@ class OptolinkVS2Protocol:
                     if self.ser2:
                         self.ser2.write(inbytes)
             except Exception:
-                return OptolinkVS2RxData(ReceiveCode.HandleLost, 0, retdata)
+                self.stats_by_receive_code[ErrorCode.SerialPortError] += 1
+                return OptolinkVS2RxData(ErrorCode.SerialPortError, 0, retdata)
 
             if state == 0:
                 if not resptelegr:
@@ -352,15 +370,17 @@ class OptolinkVS2Protocol:
 
                     elif inbuff[0] == 0x15:  # VS2_NACK
                         logging.error("VS2 NACK Error")
+                        self.stats_by_receive_code[ErrorCode.NACK] += 1
                         return OptolinkVS2RxData(
-                            ReceiveCode.NACK,
+                            ErrorCode.NACK,
                             addr,
                             alldata if not raw else bytearray(alldata),
                         )
                     else:
                         logging.error("VS2 unknown first byte error")
+                        self.stats_by_receive_code[ErrorCode.Byte0UnknownError] += 1
                         return OptolinkVS2RxData(
-                            ReceiveCode.Byte0UnknownError,
+                            ErrorCode.Byte0UnknownError,
                             addr,
                             alldata if not raw else bytearray(alldata),
                         )
@@ -377,8 +397,9 @@ class OptolinkVS2Protocol:
                 if inbuff[0] != 0x41:  # STX
                     logging.error(f"VS2 STX Error: {inbuff.hex()}")
                     # It might be necessary to wait for any remaining part of the telegram.
+                    self.stats_by_receive_code[ErrorCode.STXError] += 1
                     return OptolinkVS2RxData(
-                        ReceiveCode.STXError,
+                        ErrorCode.STXError,
                         addr,
                         alldata if not raw else bytearray(alldata),
                     )
@@ -388,8 +409,9 @@ class OptolinkVS2Protocol:
                 pllen = inbuff[1]
                 if pllen < 5:  # protocol_Id + MsgId|FnctCode + AddrHi + AddrLo + BlkLen
                     logging.error(f"VS2 Len Error: {pllen}")
+                    self.stats_by_receive_code[ErrorCode.LengthError] += 1
                     return OptolinkVS2RxData(
-                        ReceiveCode.PacketLengthError,
+                        ErrorCode.LengthError,
                         addr,
                         alldata if not raw else bytearray(alldata),
                     )
@@ -412,8 +434,9 @@ class OptolinkVS2Protocol:
                         logging.error(
                             f"VS2 CRC Error: expected=0x{expected_crc:02X} received=0x{inbuff[-1]:02X}"
                         )
+                        self.stats_by_receive_code[ErrorCode.CRCError] += 1
                         return OptolinkVS2RxData(
-                            ReceiveCode.CRCError,
+                            ErrorCode.CRCError,
                             addr,
                             retdata if not raw else bytearray(alldata),
                         )
@@ -422,8 +445,10 @@ class OptolinkVS2Protocol:
                         logging.error(
                             f"VS2 Error: dlen={dlen} content[hex]={retdata.hex()}"
                         )
+
+                        self.stats_by_receive_code[ErrorCode.ErrorMessage] += 1
                         return OptolinkVS2RxData(
-                            ReceiveCode.ErrorMessage,
+                            ErrorCode.ErrorMessage,
                             addr,
                             retdata if not raw else bytearray(alldata),
                         )
@@ -432,16 +457,18 @@ class OptolinkVS2Protocol:
                     logging.debug(
                         f"VS2 received successfully: address=0x{addr:02X} length={dlen} content[hex]={retdata.hex()}"
                     )
+                    self.stats_by_receive_code[ErrorCode.Success] += 1
                     return OptolinkVS2RxData(
-                        ReceiveCode.Success,
+                        ErrorCode.Success,
                         addr,
                         retdata if not raw else bytearray(alldata),
                     )
 
         # timed-out if we get here
 
+        self.stats_by_receive_code[ErrorCode.Timeout] += 1
         return OptolinkVS2RxData(
-            ReceiveCode.Timeout, addr, retdata if not raw else bytearray(retdata)
+            ErrorCode.Timeout, addr, retdata if not raw else bytearray(retdata)
         )
 
     # ------------------------------------------------------------------
@@ -450,7 +477,7 @@ class OptolinkVS2Protocol:
 
     def receive_fullraw(
         self, eot_time: float, timeout: float
-    ) -> tuple[ReceiveCode, bytearray]:
+    ) -> tuple[ErrorCode, bytearray]:
         inbuff = b""
         start = time.time()
         last_rx = start
@@ -465,10 +492,10 @@ class OptolinkVS2Protocol:
                     self.ser2.write(inbytes)
             elif inbuff and (time.time() - last_rx) > eot_time:
                 # if data received and no further receive since more than eot_time
-                return ReceiveCode.Success, bytearray(inbuff)
+                return ErrorCode.Success, bytearray(inbuff)
 
             if (time.time() - start) > timeout:
-                return ReceiveCode.Timeout, bytearray(inbuff)
+                return ErrorCode.Timeout, bytearray(inbuff)
 
             time.sleep(0.005)
 
@@ -482,10 +509,24 @@ class OptolinkVS2Protocol:
         lastbyte = telegram[1] + 1
         return sum(telegram[firstbyte : lastbyte + 1]) % 0x100
 
-    @staticmethod
-    def readable_hex(data: bytes) -> str:
-        # try:
-        #     return " ".join([format(byte, "02x") for byte in data])
-        # except:
-        #     return data
-        return data.hex(sep=" ")
+    # ------------------------------------------------------------------
+    # Stats
+    # ------------------------------------------------------------------
+
+    def get_stats(self) -> list[int]:
+        return self.stats_by_receive_code
+
+    def get_total_rx_frames(self) -> int:
+        # sum the successfully-received frames:
+        ret = self.stats_by_receive_code[ErrorCode.Success]
+        # with all frames failed to read:
+        for i in range(ErrorCode.FirstRXError, ErrorCode.LastRXError):
+            ret += self.stats_by_receive_code[i]
+        return ret
+
+    def get_human_friendly_stats(self) -> str:
+        total = self.get_total_rx_frames()
+        success_perc = (
+            100.0 * float(self.stats_by_receive_code[ErrorCode.Success]) / float(total)
+        )
+        return f"correct frames received: {self.stats_by_receive_code[ErrorCode.Success]}/{total} ({success_perc:0.1f}%)"

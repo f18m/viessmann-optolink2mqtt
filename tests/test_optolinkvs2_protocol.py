@@ -51,9 +51,7 @@ class OptolinkVS2ProtocolTest:
                 logging.info("Reading test datapoint 0x00F8...")
                 rxdata = proto.read_datapoint_ext(0x00F8, 8)
                 if rxdata.is_successful():
-                    logging.info(
-                        f"Datapoint content is: {OptolinkVS2Protocol.readable_hex(rxdata.data)}"
-                    )
+                    logging.info(f"Datapoint content is: {rxdata.data.hex()}")
                 else:
                     logging.error(
                         f"Error reading datapoint: code {rxdata.retcode:#02x}"
