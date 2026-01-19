@@ -223,10 +223,15 @@ class MqttClient:
         return self.topic_prefix + MqttClient.OPTOLINK2MQTT_STATUS_TOPIC
 
     def get_human_friendly_stats(self) -> str:
+        success_perc = (
+            100.0
+            * float(MqttClient.num_published_successful)
+            / float(MqttClient.num_published_total)
+        )
         status = (
             f"{MqttClient.num_disconnects} MQTT disconnections; "
-            f"{MqttClient.num_published_successful}/{MqttClient.num_published_total} successful/total MQTT messages published; "
-            f"{MqttClient.num_received_messages} MQTT messages received from subscribed topics; "
+            f"{success_perc:0.1f}% of {MqttClient.num_published_total} successful MQTT published msgs; "
+            f"{MqttClient.num_received_messages} MQTT messages received; "
         )
         return status
 

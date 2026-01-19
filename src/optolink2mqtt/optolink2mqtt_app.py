@@ -114,6 +114,10 @@ class Optolink2MqttApp:
             app.mqtt_client.publish(
                 status_topic + "/num_mqtt_disconnects", MqttClient.num_disconnects
             )
+            app.mqtt_client.publish(
+                status_topic + "/num_optolink_errors",
+                app.optolink_interface.get_total_errors(),
+            )
 
             # publish status on log
             app.log_status()
