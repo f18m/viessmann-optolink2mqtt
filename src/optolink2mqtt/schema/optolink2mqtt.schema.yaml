@@ -55,6 +55,7 @@ register_ha_discovery:
   device_class: str(required=False)
   icon: str(required=False)
   unit_of_measurement: str(required=False)
+  entity_category: str(required=False)
   expire_after: int(required=False)
   payload_on: str(required=False)
   payload_off: str(required=False)
