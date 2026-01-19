@@ -1,4 +1,4 @@
 pyserial==3.5
 paho-mqtt==2.1.0
-yamale==6.0.0
+yamale==6.1.0
 platformdirs==4.5.1
