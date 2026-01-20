@@ -541,5 +541,7 @@ class OptolinkVS2Protocol:
         success_perc = (
             100.0 * float(self.stats_by_receive_code[ErrorCode.Success]) / float(total)
         )
-        status = f"{success_perc:0.1f}% of {total} Optolink VS2 frames correctly decoded"
+        status = (
+            f"{success_perc:0.1f}% of {total} Optolink VS2 frames correctly decoded"
+        )
         return status

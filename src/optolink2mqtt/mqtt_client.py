@@ -161,6 +161,16 @@ class MqttClient:
         self._mqttc.publish(topic, payload, qos=self.qos, retain=self.retain)
         return
 
+    def publish_retained(self, topic: str, payload: str) -> None:
+        """
+        Publish a message to the MQTT broker with retain=True,
+        regardless of the retain flag provided at construction time
+        """
+        logging.debug("MqttClient.publish retained on [%s] value [%s]", topic, payload)
+        MqttClient.num_published_total += 1
+        self._mqttc.publish(topic, payload, qos=self.qos, retain=True)
+        return
+
     def subscribe(self, topic: str) -> bool:
         """
         Subscribe to a topic on the MQTT broker

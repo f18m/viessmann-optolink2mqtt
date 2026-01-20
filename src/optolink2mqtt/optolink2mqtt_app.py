@@ -111,10 +111,10 @@ class Optolink2MqttApp:
         if new_status != app.last_logged_status:
             # publish status on MQTT
             status_topic = app.mqtt_client.get_optolink2mqtt_status_topic()
-            app.mqtt_client.publish(
+            app.mqtt_client.publish_retained(
                 status_topic + "/num_mqtt_disconnects", MqttClient.num_disconnects
             )
-            app.mqtt_client.publish(
+            app.mqtt_client.publish_retained(
                 status_topic + "/num_optolink_errors",
                 app.optolink_interface.get_total_errors(),
             )
