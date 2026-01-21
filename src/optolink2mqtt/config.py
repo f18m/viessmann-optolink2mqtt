@@ -143,6 +143,7 @@ class Config:
         # add default values for optional configuration parameters, if they're missing:
         self._fill_defaults_logging()
         self._fill_defaults_mqtt()
+        self._fill_defaults_optolink()
 
         # add default values for optional configuration parameters in registers_poll_list
         validated_registers = []
@@ -161,6 +162,13 @@ class Config:
         logging.info(
             f"Configuration file '{filename}' successfully loaded and validated against schema. It contains {len(self.config['registers_poll_list'])} registers to sample/poll."
         )
+
+    def _fill_defaults_optolink(self):
+        m = self.config["optolink"]
+        if "show_received_bytes" not in m:
+            m["show_received_bytes"] = False
+        if "reconnect_period_sec" not in m:
+            m["reconnect_period_sec"] = 5
 
     def _fill_defaults_logging(self):
         # logging
