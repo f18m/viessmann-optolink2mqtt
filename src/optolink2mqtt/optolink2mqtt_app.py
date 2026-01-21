@@ -25,6 +25,7 @@ import socket
 import logging
 import sys
 import platform
+import termios
 import time
 import serial
 import paho.mqtt.client as paho  # pip install paho-mqtt
@@ -269,33 +270,6 @@ class Optolink2MqttApp:
         )
 
         #
-        # create OptolinkVS2Protocol interface
-        #
-        serial_port_name = self.config.config["optolink"]["serial_port"]
-        try:
-            ser = serial.Serial(
-                serial_port_name,
-                baudrate=4800,
-                bytesize=8,
-                parity="E",
-                stopbits=2,
-                timeout=0,
-                exclusive=True,
-            )
-        except serial.SerialException as e:
-            logging.error(f"Cannot open serial port {serial_port_name}: {e}. Aborting.")
-            return 1
-
-        self.optolink_interface = OptolinkVS2Protocol(
-            ser,
-            None,  # serial port to forward data to a Vitoconnect
-            self.config.config["optolink"]["show_received_bytes"],
-        )
-        if not self.optolink_interface.init_vs2():
-            logging.error("Cannot initialize Optolink VS2 protocol. Aborting.")
-            return 2
-
-        #
         # parse list of registers & build a schedule
         #
         register_list = self.config.config["registers_poll_list"]
@@ -503,10 +477,48 @@ class Optolink2MqttApp:
 
         self.last_ha_discovery_messages_connection_id = MqttClient.CONN_ID_INVALID
 
+        # at the start of the application we need to establish the Optolink connection
+        # and that might be required later on as well in case of serial port errors
+        new_optolink_conn_required = True
+
         # block the main thread on the MQTT client loop
         self.keep_running = True
         while self.keep_running:
             try:
+                if new_optolink_conn_required:
+                    #
+                    # create OptolinkVS2Protocol interface
+                    #
+                    serial_port_name = self.config.config["optolink"]["serial_port"]
+                    try:
+                        ser = serial.Serial(
+                            serial_port_name,
+                            baudrate=4800,
+                            bytesize=8,
+                            parity="E",
+                            stopbits=2,
+                            timeout=0,
+                            exclusive=True,
+                        )
+                    except serial.SerialException as e:
+                        logging.error(
+                            f"Cannot open serial port {serial_port_name}: {e}. Aborting."
+                        )
+                        return 1
+
+                    self.optolink_interface = OptolinkVS2Protocol(
+                        ser,
+                        None,  # serial port to forward data to a Vitoconnect
+                        self.config.config["optolink"]["show_received_bytes"],
+                    )
+                    if not self.optolink_interface.init_vs2():
+                        logging.error(
+                            "Cannot initialize Optolink VS2 protocol. Aborting."
+                        )
+                        return 2
+
+                    new_optolink_conn_required = False
+
                 # restart the MQTT client secondary thread in case it was never started or failed for some reason
                 self.mqtt_client.loop_start()
 
@@ -514,9 +526,24 @@ class Optolink2MqttApp:
                 self._core_loop()
 
             # try to recover from exceptions:
-            except socket.error:
-                logging.error("socket.error caught, sleeping for 5 sec...")
-                time.sleep(self.config.config["mqtt"]["reconnect_period_sec"])
+            except socket.error as e:
+                reconn_period_sec = self.config.config["mqtt"]["reconnect_period_sec"]
+                logging.error(
+                    f"socket/network error caught: {e}, sleeping for {reconn_period_sec} sec..."
+                )
+                time.sleep(reconn_period_sec)
+            except termios.error as e:
+                # termios is used by the pyserial POSIX implementation
+                # sometimes it throws errors when the serial port is disconnected
+                # so catch them here and trigger a new serial-port reinitialization
+                reconn_period_sec = self.config.config["optolink"][
+                    "reconnect_period_sec"
+                ]
+                logging.error(
+                    f"serial port error caught: {e}, sleeping for {reconn_period_sec} sec..."
+                )
+                new_optolink_conn_required = True
+                time.sleep(reconn_period_sec)
             except KeyboardInterrupt:
                 logging.warning("KeyboardInterrupt caught, exiting")
                 break
