@@ -244,10 +244,8 @@ class TestOptolinkVS2RegisterValueConversion:
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
 
-        with pytest.raises(ValueError) as exc_info:
-            reg.get_rawdata_from_value("INVALID")
-        assert "Invalid value" in str(exc_info.value)
-        assert "INVALID" in str(exc_info.value)
+        result = reg.get_rawdata_from_value("INVALID")
+        assert result is None
 
     def test_get_rawdata_overflow_error(self):
         """Test error handling when value overflows the register length"""

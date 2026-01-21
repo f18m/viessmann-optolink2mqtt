@@ -406,14 +406,7 @@ class Optolink2MqttApp:
             return
 
         # try to convert the payload into raw bytes to be written to the register
-        try:
-            raw_data = reg.get_rawdata_from_value(payload)
-        except ValueError as e:
-            logging.error(
-                f"Cannot convert MQTT payload '{payload}' into raw data for register '{reg.name}': {e}"
-            )
-            raw_data = None
-            # keep going -- need to schedule a read later anyway
+        raw_data = reg.get_rawdata_from_value(payload)
 
         # perform the write operation
         if raw_data is not None:

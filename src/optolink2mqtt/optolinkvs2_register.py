@@ -22,6 +22,7 @@ from typing import Dict, Any
 
 # import hashlib
 import json
+import logging
 
 
 class OptolinkVS2Register:
@@ -106,10 +107,14 @@ class OptolinkVS2Register:
         """
         return self.sampling_period_sec
 
-    def get_value_from_rawdata(self, rawdata: bytearray) -> Any:
+    def get_value_from_rawdata(self, rawdata: bytearray) -> str | int | float | None:
         """
         Returns the value of the register from the given raw data.
-        This function was named "bytesval" in original optolink-splitter codebase
+        NOTE: This function was named "bytesval" in original optolink-splitter codebase.
+
+        This function will return a string if the register has an enum_dict defined,
+        otherwise it will return an integer or float depending on the scale factor.
+        In case of invalid conversion, None is returned.
         """
 
         if self.enum_dict is not None:
@@ -125,24 +130,35 @@ class OptolinkVS2Register:
                     rawdata = rawdata[start:end]
 
             val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
+
+            if not self.signed:
+                maxpossible_value = int.from_bytes(
+                    [0xFF] * self.length, byteorder="little", signed=False
+                )
+                if val > maxpossible_value * 0.9:
+                    logging.warning(
+                        f"Register '{self.name}' read value {rawdata.hex()} is suspiciously close to the max possible value {maxpossible_value} for a {self.length}-long register, which might indicate a SIGNED value was read in a register declared as UNSIGNED. Did you forget to declare this register as SIGNED?"
+                    )
+
             if self.scale_factor != 1.0:
                 val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
         return val
 
-    def get_rawdata_from_value(self, str_value: str) -> bytearray:
+    def get_rawdata_from_value(self, str_value: str) -> bytearray | None:
         """
         Converts a generic string into raw data (bytearray) suitable to be written
         into the register of the Viessmann device.
-        Raises ValueError in case of invalid value.
+        Returns None in case of conversion error.
         """
         val = 0
         if self.enum_dict is not None:
             # reverse lookup in enum dict
             reverse_enum = {v: k for k, v in self.enum_dict.items()}
             if str_value not in reverse_enum:
-                raise ValueError(
+                logging.error(
                     f"Invalid value '{str_value}' for register '{self.name}'; valid values are: {list(self.enum_dict.values())}"
                 )
+                return None
             val = reverse_enum[str_value]
         else:
             # normal numeric value
@@ -157,9 +173,10 @@ class OptolinkVS2Register:
                 val = int(str_value)
         rawdata = val.to_bytes(self.length, byteorder="little", signed=self.signed)
         if len(rawdata) != self.length:
-            raise ValueError(
+            logging.error(
                 f"Value '{str_value}' for register '{self.name}' cannot be represented in {self.length} bytes."
             )
+            return None
 
         return bytearray(rawdata)
 

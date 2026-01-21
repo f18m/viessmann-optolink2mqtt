@@ -4,6 +4,8 @@
 # Python development targets:
 #
 
+all: format lint test
+
 format:
 	black .
 
