@@ -114,7 +114,7 @@ The portion after `ID` is the `vendor ID` colon `product ID`. In my case `1a86` 
 sudo nano /etc/udev/rules.d/99_optolink_usb.rules
 ```
 
-and copy-paste there a line containing a reference to the same `vendor ID` and `product ID` that appear:
+and copy-paste there a line containing a reference to the same `vendor ID` and `product ID` that appeared in the `lsusb` output:
 
 ```
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="optolinkUSB"
