@@ -19,6 +19,7 @@ logging:
 optolink:
   serial_port: '/dev/ttyUSB0'     # Serial port for Optolink device (mandatory, default: '/dev/ttyUSB0')
   show_received_bytes: False      # Useful for debugging purposes only
+  reconnect_period_sec: 5         # Period (in seconds) to wait before reconnecting to Optolink device if connection is lost
 
 mqtt:
   # broker: details about the MQTT broker
