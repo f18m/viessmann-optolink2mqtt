@@ -13,6 +13,7 @@ logging:
 optolink:
   serial_port: str()
   show_received_bytes: bool(required=False)
+  reconnect_period_sec: int(required=False)
 ---
 mqtt:
   broker: include('mqtt_broker')
