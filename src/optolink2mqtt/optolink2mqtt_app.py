@@ -67,31 +67,36 @@ class Optolink2MqttApp:
             f"{self.optolink_interface.get_human_friendly_stats()}"
         )
 
-    def _sample_register(self, reg: OptolinkVS2Register) -> None:
+    def _sample_register(self, reg: OptolinkVS2Register) -> bool:
         """
         Samples a single register and publishes its value on MQTT.
         """
 
         rx_data = self.optolink_interface.read_datapoint_ext(reg.address, reg.length)
-        if rx_data.is_successful():
-            # publish on MQTT the "value" obtained from the raw data
-            self.mqtt_client.publish(
-                reg.get_mqtt_state_topic(), reg.get_value_from_rawdata(rx_data.data)
-            )
-        else:
+        if not rx_data.is_successful():
             # NOTE that the error is already logged inside OptolinkVS2Protocol
             #      which also maintains error counters
             logging.error(
                 f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
             )
+            return False
+
+        # publish on MQTT the "value" obtained from the raw data
+        self.mqtt_client.publish(
+            reg.get_mqtt_state_topic(), reg.get_value_from_rawdata(rx_data.data)
+        )
+        return True
 
     def _sample_all_registers(self) -> None:
         """
         Samples all registers and publishes their values on MQTT.
         """
 
+        nregs = 0
         for reg in self.register_list_by_cmd_topic.values():
-            self._sample_register(reg)
+            if self._sample_register(reg):
+                nregs += 1
+        logging.info(f"Sampled {nregs} registers successfully and published on MQTT")
 
     @staticmethod
     def on_schedule_timer(app: "Optolink2MqttApp", reg: OptolinkVS2Register) -> None:
