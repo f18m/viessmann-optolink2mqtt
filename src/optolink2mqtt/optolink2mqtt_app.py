@@ -540,10 +540,10 @@ class Optolink2MqttApp:
 
                     new_optolink_conn_required = False
 
-                    # immediately after a new Optolink connection is estabilished,
+                    # immediately after a new Optolink connection is established,
                     # publish all registers to MQTT
                     logging.warning(
-                        "New Optolink connection estabilished; publishing all sensor values (regardless of their schedule)..."
+                        "New Optolink connection established; publishing all sensor values (regardless of their schedule)..."
                     )
                     self._sample_all_registers()
 
