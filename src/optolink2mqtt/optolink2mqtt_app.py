@@ -362,10 +362,17 @@ class Optolink2MqttApp:
             # looks like a new MQTT connection to the broker has (recently) been estabilished;
             # send out MQTT discovery messages
             logging.warning(
-                f"New connection to the MQTT broker detected (id={curr_conn_id}), sending out MQTT discovery messages..."
+                f"New connection to the MQTT broker detected (id={curr_conn_id}); phase 1: sending out MQTT discovery messages..."
             )
             self._publish_ha_discovery_messages()
             self.last_ha_discovery_messages_connection_id = curr_conn_id
+
+            # to be on the safe side, immediately after sending out the discovery messages,
+            # sample all registers and publish their values on MQTT
+            logging.warning(
+                f"New connection to the MQTT broker detected (id={curr_conn_id}); phase 2: sending out all sensor values (regardless of their schedule)..."
+            )
+            self._sample_all_registers()
 
         if self.mqtt_client.get_and_reset_ha_discovery_messages_requested_flag():
             # MQTT discovery messages have been requested...
