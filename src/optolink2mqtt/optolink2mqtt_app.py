@@ -67,6 +67,32 @@ class Optolink2MqttApp:
             f"{self.optolink_interface.get_human_friendly_stats()}"
         )
 
+    def _sample_register(self, reg: OptolinkVS2Register) -> None:
+        """
+        Samples a single register and publishes its value on MQTT.
+        """
+
+        rx_data = self.optolink_interface.read_datapoint_ext(reg.address, reg.length)
+        if rx_data.is_successful():
+            # publish on MQTT the "value" obtained from the raw data
+            self.mqtt_client.publish(
+                reg.get_mqtt_state_topic(), reg.get_value_from_rawdata(rx_data.data)
+            )
+        else:
+            # NOTE that the error is already logged inside OptolinkVS2Protocol
+            #      which also maintains error counters
+            logging.error(
+                f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
+            )
+
+    def _sample_all_registers(self) -> None:
+        """
+        Samples all registers and publishes their values on MQTT.
+        """
+
+        for reg in self.register_list_by_cmd_topic.values():
+            self._sample_register(reg)
+
     @staticmethod
     def on_schedule_timer(app: "Optolink2MqttApp", reg: OptolinkVS2Register) -> None:
         """
@@ -79,16 +105,7 @@ class Optolink2MqttApp:
             f"Optolink2MqttApp.on_schedule_timer(name={reg.name}, addr=0x{reg.address:02x})",
         )
 
-        rx_data = app.optolink_interface.read_datapoint_ext(reg.address, reg.length)
-        if rx_data.is_successful():
-            # publish on MQTT the "value" obtained from the raw data
-            app.mqtt_client.publish(
-                reg.get_mqtt_state_topic(), reg.get_value_from_rawdata(rx_data.data)
-            )
-        else:
-            logging.error(
-                f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
-            )
+        app._sample_register(reg)
 
         # reschedule next occurrence for this register
         app.scheduler.enter(
@@ -352,11 +369,10 @@ class Optolink2MqttApp:
             )
             self._publish_ha_discovery_messages()
 
-            # TODO
-            # logging.warning(
-            #    "Detected notification that Home Assistant just (re)started; phase 2: publishing all sensor values (regardless of their schedule)..."
-            # )
-            # self.read_all_registers()
+            logging.warning(
+                "Detected notification that Home Assistant just (re)started; phase 2: publishing all sensor values (regardless of their schedule)..."
+            )
+            self._sample_all_registers()
 
     def _process_received_mqtt_message(self, msg: paho.MQTTMessage) -> None:
         """
@@ -518,6 +534,13 @@ class Optolink2MqttApp:
                         return 2
 
                     new_optolink_conn_required = False
+
+                    # immediately after a new Optolink connection is estabilished,
+                    # publish all registers to MQTT
+                    logging.warning(
+                        "New Optolink connection estabilished; publishing all sensor values (regardless of their schedule)..."
+                    )
+                    self._sample_all_registers()
 
                 # restart the MQTT client secondary thread in case it was never started or failed for some reason
                 self.mqtt_client.loop_start()
