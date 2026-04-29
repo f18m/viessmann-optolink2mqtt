@@ -118,7 +118,7 @@ jobs:
 
       - name: Metadata extraction
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
       - name: Decorate docker image version
         id: docker_version
         run: |
