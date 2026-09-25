@@ -1,0 +1,15 @@
+#
+# Docker Compose configuration for the Optolink2mqtt service
+# See https://github.com/f18m/viessmann-optolink2mqtt
+#
+
+services:
+  optolink2mqtt:
+    image: ghcr.io/f18m/optolink2mqtt:latest
+    container_name: optolink2mqtt
+    hostname: ${HOSTNAME:-optolink2mqtt}
+    restart: unless-stopped
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    volumes:
+      - ./optolink2mqtt.yaml:/etc/optolink2mqtt/optolink2mqtt.yaml:ro
