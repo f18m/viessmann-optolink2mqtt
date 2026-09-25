@@ -90,6 +90,10 @@ be restarted after a reboot.
 
 The docker image of optolink2mqtt supports 3 main architectures: `amd64`, `armv7` and `arm64`.
 
+### Docker Compose
+
+If you prefer Docker Compose you can grab the [docker-compose.yml](./docker-compose.yml) file and just edit the name of your serial port (e.g. replace `/dev/ttyUSB0` with the serial port you get on your device).
+
 ### Serial port naming
 
 Something you might notice running this project on certain HW platforms is that sometimes
