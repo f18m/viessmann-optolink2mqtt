@@ -133,7 +133,7 @@ jobs:
           echo "Docker image will be versioned as: ${{ steps.docker_version.outputs.version }}"
 
       - name: Build and push Docker image [root]
-        uses: mr-smithers-excellent/docker-build-push@v6
+        uses: mr-smithers-excellent/docker-build-push@v7
         with:
           # options related to BUILDing the docker image:
           dockerfile: ./Dockerfile
