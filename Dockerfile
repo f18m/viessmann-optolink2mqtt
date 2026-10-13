@@ -2,7 +2,7 @@
 # Builder docker
 #
 
-FROM public.ecr.aws/docker/library/python:3.14-alpine AS builder
+FROM public.ecr.aws/docker/library/python:3.15-alpine AS builder
 
 # NOTE: git is required to get the "hatch-vcs" plugin to work and produce the _optolink2mqtt_version.py file
 RUN apk add build-base linux-headers git
@@ -22,7 +22,7 @@ RUN python -m build --wheel --outdir /build/wheel
 # Production docker
 #
 
-FROM public.ecr.aws/docker/library/python:3.14-alpine
+FROM public.ecr.aws/docker/library/python:3.15-alpine
 
 ARG USERNAME=optolink2mqtt
 LABEL org.opencontainers.image.source=https://github.com/f18m/optolink2mqtt
