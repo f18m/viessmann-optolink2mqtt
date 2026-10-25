@@ -144,6 +144,7 @@ class Config:
         self._fill_defaults_logging()
         self._fill_defaults_mqtt()
         self._fill_defaults_optolink()
+        self._apply_mqtt_password_from_env()
 
         # add default values for optional configuration parameters in registers_poll_list
         validated_registers = []
@@ -223,6 +224,26 @@ class Config:
 
         # enhance the original config with the one containing all settings:
         self.config["mqtt"] = m
+
+    def _apply_mqtt_password_from_env(self):
+        password = os.getenv("MQTT_BROKER_PASSWORD")
+        if password is not None:
+            self.config["mqtt"]["broker"]["password"] = password
+            return
+
+        password_file = os.getenv("MQTT_BROKER_PASSWORD_FILE")
+        if password_file is None:
+            return
+
+        try:
+            with open(password_file, encoding="utf-8") as file:
+                password = file.read().rstrip("\r\n")
+        except OSError as e:
+            raise ValueError(
+                f"Error reading MQTT broker password file '{password_file}': {e}"
+            ) from e
+
+        self.config["mqtt"]["broker"]["password"] = password
 
     def _fill_defaults_register(self, reg: dict) -> dict:
         if "sampling_period_sec" not in reg:

@@ -90,6 +90,26 @@ be restarted after a reboot.
 
 The docker image of optolink2mqtt supports 3 main architectures: `amd64`, `armv7` and `arm64`.
 
+For an MQTT broker that requires authentication, set `MQTT_BROKER_PASSWORD` to provide
+the password through an environment variable. To use a Docker secret instead, mount
+the secret file and set `MQTT_BROKER_PASSWORD_FILE` to its path:
+
+```sh
+docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
+    -v <path to secret file>:/run/secrets/mqtt_broker_password:ro \
+    --env MQTT_BROKER_PASSWORD_FILE=/run/secrets/mqtt_broker_password \
+    --device=/dev/ttyUSB0 \
+    --hostname $(hostname) \
+    --name optolink2mqtt \
+    --restart=unless-stopped \
+    ghcr.io/f18m/optolink2mqtt:latest
+```
+
+The broker username is configured in `mqtt.broker.username` in the YAML file.
+`MQTT_BROKER_PASSWORD` takes precedence over `MQTT_BROKER_PASSWORD_FILE`, and either
+environment variable overrides `mqtt.broker.password` in the YAML configuration.
+A trailing newline in the password file is ignored.
+
 ### Docker Compose
 
 If you prefer Docker Compose you can grab the [docker-compose.yml](./docker-compose.yml) file and just edit the name of your serial port (e.g. replace `/dev/ttyUSB0` with the serial port you get on your device).
