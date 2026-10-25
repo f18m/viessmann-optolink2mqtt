@@ -277,12 +277,15 @@ class MqttClient:
 
         if reason_code != 0:
             logging.warning(
-                f"Connected to MQTT broker with reason_code={reason_code}, connection_id={self._connection_id}"
+                f"MQTT broker rejected connection with reason_code={reason_code}, connection_id={self._connection_id}"
             )
         else:
             logging.info(
                 f"Successfully connected to MQTT broker with connection_id={self._connection_id}"
             )
+
+        if reason_code != 0:
+            return
 
         # update our status:
         self._mqttc.publish(
