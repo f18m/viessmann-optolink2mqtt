@@ -85,6 +85,7 @@ class MqttClient:
 
         # internal flags:
         self._connection_id = MqttClient.CONN_ID_INVALID
+        self._connection_rejected = False
         self._ha_discovery_messages_requested = False
 
         # use MQTT v3.1.1 for now
@@ -276,10 +277,12 @@ class MqttClient:
         self._connection_id += 1
 
         if reason_code != 0:
+            self._connection_rejected = True
             logging.warning(
                 f"MQTT broker rejected connection with reason_code={reason_code}, connection_id={self._connection_id}"
             )
         else:
+            self._connection_rejected = False
             logging.info(
                 f"Successfully connected to MQTT broker with connection_id={self._connection_id}"
             )
@@ -325,6 +328,11 @@ class MqttClient:
         MQTT callback in case of unexpected disconnection from the broker
         """
         if reason_code != 0:
+            if self._connection_rejected:
+                self._connection_rejected = False
+                time.sleep(self.reconnect_period_sec)
+                return
+
             MqttClient.num_disconnects += 1
             logging.warning(
                 f"OOOOPS! Unexpected disconnection from the MQTT broker with reason=[{reason_code}] for connection_id={self._connection_id}. Reconnecting in {self.reconnect_period_sec}sec."
