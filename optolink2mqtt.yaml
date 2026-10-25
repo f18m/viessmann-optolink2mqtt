@@ -27,6 +27,9 @@ mqtt:
     host: localhost
     port: 1883
     #username:
+    # Set the password with MQTT_BROKER_PASSWORD or provide a Docker secret file using
+    # MQTT_BROKER_PASSWORD_FILE=/run/secrets/mqtt_broker_password.
+    # MQTT_BROKER_PASSWORD takes precedence if both environment variables are set.
     #password:
   
   # client_id: the identifier of the MQTT client created by optolink2mqtt; this is useful to identify optolink2mqtt
