@@ -169,9 +169,9 @@ class Config:
         if "show_received_bytes" not in m:
             m["show_received_bytes"] = False
         if "reconnect_period_sec" not in m:
-            m["reconnect_period_sec"] = 5
+            m["reconnect_period_sec"] = 60
         if "reconnect_timeout_sec" not in m:
-            m["reconnect_timeout_sec"] = 60
+            m["reconnect_timeout_sec"] = 600
         if "max_consecutive_failures_before_reinit" not in m:
             m["max_consecutive_failures_before_reinit"] = 3
 
