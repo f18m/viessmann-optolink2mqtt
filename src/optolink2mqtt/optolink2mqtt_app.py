@@ -33,7 +33,7 @@ import paho.mqtt.client as paho  # pip install paho-mqtt
 from .config import Config
 from .mqtt_client import MqttClient
 from .optolinkvs2_register import OptolinkVS2Register
-from .optolinkvs2_protocol import OptolinkVS2Protocol
+from .optolink_interface import OptolinkInterface
 
 
 class Optolink2MqttApp:
@@ -44,17 +44,14 @@ class Optolink2MqttApp:
     NORMAL_SCHEDULER_PRIORITY = 10
     LOW_SCHEDULER_PRIORITY = 100
 
-    MAX_CONSECUTIVE_FAILURES_BEFORE_REINIT = 3
-
     def __init__(self) -> None:
         # the app is composed by 4 major components:
         self.config = None  # instance of Config
         self.message_queue = queue.Queue(Optolink2MqttApp.MAX_PENDING_MESSAGES)
         self.mqtt_client = None  # instance of MqttClient
         self.scheduler = None  # instance of sched.scheduler
-        self.optolink_interface = None  # instance of OptolinkVS2Protocol
+        self.optolink_interface = None  # instance of OptolinkInterface
         self.last_logged_status = (None, None, None)
-        self.consecutive_optolink_failures = 0
 
         # dict of OptolinkVS2Register instances keyed by their COMMAND TOPIC
         self.register_list_by_cmd_topic = {}
@@ -70,47 +67,17 @@ class Optolink2MqttApp:
             f"{self.optolink_interface.get_human_friendly_stats()}"
         )
 
-    def _track_optolink_result(self, rx_data) -> None:
-        """
-        Keeps track of consecutive Optolink communication failures; after too many of them
-        (e.g. the heat pump was power-cycled and went back to its default protocol state)
-        the VS2 protocol is initialized again.
-        """
-
-        if rx_data.is_successful():
-            self.consecutive_optolink_failures = 0
-            return
-
-        self.consecutive_optolink_failures += 1
-        if (
-            self.consecutive_optolink_failures
-            >= Optolink2MqttApp.MAX_CONSECUTIVE_FAILURES_BEFORE_REINIT
-        ):
-            logging.warning(
-                f"{self.consecutive_optolink_failures} consecutive Optolink failures; re-initializing VS2 protocol..."
-            )
-            if self.optolink_interface.init_vs2():
-                self.consecutive_optolink_failures = 0
-
     def _sample_register(self, reg: OptolinkVS2Register) -> bool:
         """
         Samples a single register and publishes its value on MQTT.
         """
 
-        rx_data = self.optolink_interface.read_datapoint_ext(reg.address, reg.length)
-        self._track_optolink_result(rx_data)
-        if not rx_data.is_successful():
-            # NOTE that the error is already logged inside OptolinkVS2Protocol
-            #      which also maintains error counters
-            logging.error(
-                f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code {int(rx_data.receive_code)} ({rx_data.receive_code.name})"
-            )
+        value = self.optolink_interface.sample_register(reg)
+        if value is None:
             return False
 
         # publish on MQTT the "value" obtained from the raw data
-        self.mqtt_client.publish(
-            reg.get_mqtt_state_topic(), reg.get_value_from_rawdata(rx_data.data)
-        )
+        self.mqtt_client.publish(reg.get_mqtt_state_topic(), value)
         return True
 
     def _sample_all_registers(self) -> None:
@@ -318,6 +285,16 @@ class Optolink2MqttApp:
         )
 
         #
+        # create OptolinkInterface (the serial port is opened later, in run())
+        #
+        self.optolink_interface = OptolinkInterface(
+            self.config.config["optolink"]["serial_port"],
+            self.config.config["optolink"]["show_received_bytes"],
+            self.config.config["optolink"]["reconnect_period_sec"],
+            self.config.config["optolink"]["reconnect_timeout_sec"],
+        )
+
+        #
         # parse list of registers & build a schedule
         #
         register_list = self.config.config["registers_poll_list"]
@@ -438,17 +415,11 @@ class Optolink2MqttApp:
 
         # perform the write operation
         if raw_data is not None:
-            rx_data = self.optolink_interface.write_datapoint_ext(reg.address, raw_data)
-            self._track_optolink_result(rx_data)
-            if rx_data.is_successful():
+            if self.optolink_interface.write_register(reg, raw_data):
                 logging.info(
                     f"Successfully wrote value [{raw_data.hex()}], obtained from MQTT payload '{payload}' to register '{reg.name}' (0x{reg.address:04x})"
                 )
-            else:
-                logging.error(
-                    f"Failed to write register '{reg.name}' (addr=0x{reg.address:04x}): error code {int(rx_data.receive_code)} ({rx_data.receive_code.name})"
-                )
-                # keep going -- need to schedule a read later anyway
+            # on failure keep going -- need to schedule a read later anyway
 
         # now schedule to read back the register to publish the updated value on MQTT ASAP;
         # otherwise other MQTT clients will not see the updated value till the next
@@ -535,40 +506,17 @@ class Optolink2MqttApp:
         # at the start of the application we need to establish the Optolink connection
         # and that might be required later on as well in case of serial port errors
         new_optolink_conn_required = True
-        serial_reconn_attempts = 0
 
         # block the main thread on the MQTT client loop
         self.keep_running = True
         while self.keep_running:
             try:
                 if new_optolink_conn_required:
-                    #
-                    # create OptolinkVS2Protocol interface
-                    #
-                    serial_port_name = self.config.config["optolink"]["serial_port"]
-                    ser = serial.Serial(
-                        serial_port_name,
-                        baudrate=4800,
-                        bytesize=8,
-                        parity="E",
-                        stopbits=2,
-                        timeout=0,
-                        exclusive=True,
-                    )
-
-                    self.optolink_interface = OptolinkVS2Protocol(
-                        ser,
-                        None,  # serial port to forward data to a Vitoconnect
-                        self.config.config["optolink"]["show_received_bytes"],
-                    )
-                    if not self.optolink_interface.init_vs2():
-                        logging.error(
-                            "Cannot initialize Optolink VS2 protocol. Aborting."
-                        )
+                    if not self.optolink_interface.connect():
+                        logging.error("Aborting.")
                         return 2
 
                     new_optolink_conn_required = False
-                    serial_reconn_attempts = 0
 
                     # immediately after a new Optolink connection is established,
                     # publish all registers to MQTT
@@ -594,25 +542,9 @@ class Optolink2MqttApp:
                 # termios is used by the pyserial POSIX implementation
                 # sometimes it throws errors when the serial port is disconnected
                 # so catch them here and trigger a new serial-port reinitialization
-                reconn_period_sec = self.config.config["optolink"][
-                    "reconnect_period_sec"
-                ]
-                reconn_timeout_sec = self.config.config["optolink"][
-                    "reconnect_timeout_sec"
-                ]
-                max_attempts = max(1, int(reconn_timeout_sec / reconn_period_sec))
-                serial_reconn_attempts += 1
-                if serial_reconn_attempts > max_attempts:
-                    logging.error(
-                        f"serial port error caught: {e}; giving up after {max_attempts} reconnection attempts. Aborting."
-                    )
+                if not self.optolink_interface.handle_serial_error(e):
                     return 1
-                logging.error(
-                    f"serial port error caught: {e}, sleeping for {reconn_period_sec} sec "
-                    f"(reconnection attempt {serial_reconn_attempts}/{max_attempts})..."
-                )
                 new_optolink_conn_required = True
-                time.sleep(reconn_period_sec)
             except KeyboardInterrupt:
                 logging.warning("KeyboardInterrupt caught, exiting")
                 break
