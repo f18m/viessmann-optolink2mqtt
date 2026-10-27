@@ -172,6 +172,8 @@ class Config:
             m["reconnect_period_sec"] = 5
         if "reconnect_timeout_sec" not in m:
             m["reconnect_timeout_sec"] = 60
+        if "max_consecutive_failures_before_reinit" not in m:
+            m["max_consecutive_failures_before_reinit"] = 3
 
     def _fill_defaults_logging(self):
         # logging

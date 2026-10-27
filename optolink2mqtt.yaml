@@ -21,6 +21,7 @@ optolink:
   show_received_bytes: False      # Useful for debugging purposes only
   reconnect_period_sec: 5         # Period (in seconds) to wait before reconnecting to Optolink device if connection is lost
   reconnect_timeout_sec: 60        # Give up (and exit with an error) if the Optolink serial port cannot be (re)opened within this time
+  max_consecutive_failures_before_reinit: 3  # Re-initialize the VS2 protocol after this many consecutive read/write failures (e.g. after a heat pump power cycle)
 
 mqtt:
   # broker: details about the MQTT broker

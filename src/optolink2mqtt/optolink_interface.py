@@ -31,19 +31,21 @@ class OptolinkInterface:
     reconnection retries and register sampling/writing.
     """
 
-    MAX_CONSECUTIVE_FAILURES_BEFORE_REINIT = 3
-
     def __init__(
         self,
         serial_port: str,
         show_received_bytes: bool,
         reconnect_period_sec: float,
         reconnect_timeout_sec: float,
+        max_consecutive_failures_before_reinit: int = 3,
     ) -> None:
         self.serial_port = serial_port
         self.show_received_bytes = show_received_bytes
         self.reconnect_period_sec = reconnect_period_sec
         self.reconnect_timeout_sec = reconnect_timeout_sec
+        self.max_consecutive_failures_before_reinit = (
+            max_consecutive_failures_before_reinit
+        )
 
         self.protocol = None  # instance of OptolinkVS2Protocol
         self.reconn_attempts = 0
@@ -119,7 +121,7 @@ class OptolinkInterface:
             return
 
         self.consecutive_failures += 1
-        if self.consecutive_failures >= self.MAX_CONSECUTIVE_FAILURES_BEFORE_REINIT:
+        if self.consecutive_failures >= self.max_consecutive_failures_before_reinit:
             logging.warning(
                 f"{self.consecutive_failures} consecutive Optolink failures; re-initializing VS2 protocol..."
             )
