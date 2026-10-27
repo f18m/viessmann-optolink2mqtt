@@ -44,6 +44,8 @@ class Optolink2MqttApp:
     NORMAL_SCHEDULER_PRIORITY = 10
     LOW_SCHEDULER_PRIORITY = 100
 
+    MAX_CONSECUTIVE_FAILURES_BEFORE_REINIT = 3
+
     def __init__(self) -> None:
         # the app is composed by 4 major components:
         self.config = None  # instance of Config
@@ -52,6 +54,7 @@ class Optolink2MqttApp:
         self.scheduler = None  # instance of sched.scheduler
         self.optolink_interface = None  # instance of OptolinkVS2Protocol
         self.last_logged_status = (None, None, None)
+        self.consecutive_optolink_failures = 0
 
         # dict of OptolinkVS2Register instances keyed by their COMMAND TOPIC
         self.register_list_by_cmd_topic = {}
@@ -67,12 +70,35 @@ class Optolink2MqttApp:
             f"{self.optolink_interface.get_human_friendly_stats()}"
         )
 
+    def _track_optolink_result(self, rx_data) -> None:
+        """
+        Keeps track of consecutive Optolink communication failures; after too many of them
+        (e.g. the heat pump was power-cycled and went back to its default protocol state)
+        the VS2 protocol is initialized again.
+        """
+
+        if rx_data.is_successful():
+            self.consecutive_optolink_failures = 0
+            return
+
+        self.consecutive_optolink_failures += 1
+        if (
+            self.consecutive_optolink_failures
+            >= Optolink2MqttApp.MAX_CONSECUTIVE_FAILURES_BEFORE_REINIT
+        ):
+            logging.warning(
+                f"{self.consecutive_optolink_failures} consecutive Optolink failures; re-initializing VS2 protocol..."
+            )
+            if self.optolink_interface.init_vs2():
+                self.consecutive_optolink_failures = 0
+
     def _sample_register(self, reg: OptolinkVS2Register) -> bool:
         """
         Samples a single register and publishes its value on MQTT.
         """
 
         rx_data = self.optolink_interface.read_datapoint_ext(reg.address, reg.length)
+        self._track_optolink_result(rx_data)
         if not rx_data.is_successful():
             # NOTE that the error is already logged inside OptolinkVS2Protocol
             #      which also maintains error counters
@@ -413,6 +439,7 @@ class Optolink2MqttApp:
         # perform the write operation
         if raw_data is not None:
             rx_data = self.optolink_interface.write_datapoint_ext(reg.address, raw_data)
+            self._track_optolink_result(rx_data)
             if rx_data.is_successful():
                 logging.info(
                     f"Successfully wrote value [{raw_data.hex()}], obtained from MQTT payload '{payload}' to register '{reg.name}' (0x{reg.address:04x})"
