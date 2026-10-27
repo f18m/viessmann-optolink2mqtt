@@ -292,6 +292,7 @@ class Optolink2MqttApp:
             self.config.config["optolink"]["show_received_bytes"],
             self.config.config["optolink"]["reconnect_period_sec"],
             self.config.config["optolink"]["reconnect_timeout_sec"],
+            self.config.config["optolink"]["max_consecutive_failures_before_reinit"],
         )
 
         #
