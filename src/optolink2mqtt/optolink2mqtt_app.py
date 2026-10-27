@@ -77,7 +77,7 @@ class Optolink2MqttApp:
             # NOTE that the error is already logged inside OptolinkVS2Protocol
             #      which also maintains error counters
             logging.error(
-                f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
+                f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code {int(rx_data.receive_code)} ({rx_data.receive_code.name})"
             )
             return False
 
@@ -419,7 +419,7 @@ class Optolink2MqttApp:
                 )
             else:
                 logging.error(
-                    f"Failed to write register '{reg.name}' (addr=0x{reg.address:04x}): error code 0x{rx_data.return_code:02x}"
+                    f"Failed to write register '{reg.name}' (addr=0x{reg.address:04x}): error code {int(rx_data.receive_code)} ({rx_data.receive_code.name})"
                 )
                 # keep going -- need to schedule a read later anyway
 
