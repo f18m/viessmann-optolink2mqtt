@@ -170,6 +170,8 @@ class Config:
             m["show_received_bytes"] = False
         if "reconnect_period_sec" not in m:
             m["reconnect_period_sec"] = 5
+        if "reconnect_timeout_sec" not in m:
+            m["reconnect_timeout_sec"] = 60
 
     def _fill_defaults_logging(self):
         # logging

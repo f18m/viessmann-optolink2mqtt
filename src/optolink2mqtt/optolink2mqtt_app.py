@@ -518,21 +518,35 @@ class Optolink2MqttApp:
                     # create OptolinkVS2Protocol interface
                     #
                     serial_port_name = self.config.config["optolink"]["serial_port"]
-                    try:
-                        ser = serial.Serial(
-                            serial_port_name,
-                            baudrate=4800,
-                            bytesize=8,
-                            parity="E",
-                            stopbits=2,
-                            timeout=0,
-                            exclusive=True,
-                        )
-                    except serial.SerialException as e:
-                        logging.error(
-                            f"Cannot open serial port {serial_port_name}: {e}. Aborting."
-                        )
-                        return 1
+                    reconn_period_sec = self.config.config["optolink"][
+                        "reconnect_period_sec"
+                    ]
+                    reconn_timeout_sec = self.config.config["optolink"][
+                        "reconnect_timeout_sec"
+                    ]
+                    deadline = time.monotonic() + reconn_timeout_sec
+                    while True:
+                        try:
+                            ser = serial.Serial(
+                                serial_port_name,
+                                baudrate=4800,
+                                bytesize=8,
+                                parity="E",
+                                stopbits=2,
+                                timeout=0,
+                                exclusive=True,
+                            )
+                            break
+                        except serial.SerialException as e:
+                            if time.monotonic() + reconn_period_sec > deadline:
+                                logging.error(
+                                    f"Cannot open serial port {serial_port_name}: {e}. Giving up after {reconn_timeout_sec} sec. Aborting."
+                                )
+                                return 1
+                            logging.error(
+                                f"Cannot open serial port {serial_port_name}: {e}. Retrying in {reconn_period_sec} sec..."
+                            )
+                            time.sleep(reconn_period_sec)
 
                     self.optolink_interface = OptolinkVS2Protocol(
                         ser,
@@ -567,7 +581,7 @@ class Optolink2MqttApp:
                     f"socket/network error caught: {e}, sleeping for {reconn_period_sec} sec..."
                 )
                 time.sleep(reconn_period_sec)
-            except termios.error as e:
+            except (termios.error, serial.SerialException) as e:
                 # termios is used by the pyserial POSIX implementation
                 # sometimes it throws errors when the serial port is disconnected
                 # so catch them here and trigger a new serial-port reinitialization
