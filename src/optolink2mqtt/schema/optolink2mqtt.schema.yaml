@@ -15,6 +15,7 @@ optolink:
   show_received_bytes: bool(required=False)
   reconnect_period_sec: int(required=False)
   reconnect_timeout_sec: int(required=False)
+  max_consecutive_failures_before_reinit: int(required=False, min=1)
 ---
 mqtt:
   broker: include('mqtt_broker')

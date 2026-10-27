@@ -37,14 +37,19 @@ class OptolinkInterface:
         show_received_bytes: bool,
         reconnect_period_sec: float,
         reconnect_timeout_sec: float,
+        max_consecutive_failures_before_reinit: int = 3,
     ) -> None:
         self.serial_port = serial_port
         self.show_received_bytes = show_received_bytes
         self.reconnect_period_sec = reconnect_period_sec
         self.reconnect_timeout_sec = reconnect_timeout_sec
+        self.max_consecutive_failures_before_reinit = (
+            max_consecutive_failures_before_reinit
+        )
 
         self.protocol = None  # instance of OptolinkVS2Protocol
         self.reconn_attempts = 0
+        self.consecutive_failures = 0
 
     def is_connected(self) -> bool:
         return self.protocol is not None
@@ -78,6 +83,7 @@ class OptolinkInterface:
 
         self.protocol = protocol
         self.reconn_attempts = 0
+        self.consecutive_failures = 0
         return True
 
     def handle_serial_error(self, e: Exception) -> bool:
@@ -104,12 +110,31 @@ class OptolinkInterface:
         time.sleep(self.reconnect_period_sec)
         return True
 
+    def _track_result(self, rx_data) -> None:
+        """
+        Counts consecutive failures; after too many of them (e.g. the heat pump was
+        power-cycled and lost the VS2 protocol state) the VS2 protocol is initialized again.
+        """
+
+        if rx_data.is_successful():
+            self.consecutive_failures = 0
+            return
+
+        self.consecutive_failures += 1
+        if self.consecutive_failures >= self.max_consecutive_failures_before_reinit:
+            logging.warning(
+                f"{self.consecutive_failures} consecutive Optolink failures; re-initializing VS2 protocol..."
+            )
+            if self.protocol.init_vs2():
+                self.consecutive_failures = 0
+
     def sample_register(self, reg: OptolinkVS2Register):
         """
         Reads a register from the device and returns its value, or None on failure.
         """
 
         rx_data = self.protocol.read_datapoint_ext(reg.address, reg.length)
+        self._track_result(rx_data)
         if not rx_data.is_successful():
             # NOTE that the error is already logged inside OptolinkVS2Protocol
             #      which also maintains error counters
@@ -125,6 +150,7 @@ class OptolinkInterface:
         """
 
         rx_data = self.protocol.write_datapoint_ext(reg.address, raw_data)
+        self._track_result(rx_data)
         if rx_data.is_successful():
             return True
         logging.error(
