@@ -17,10 +17,18 @@ logging:
   report_status_period_sec: 600
 
 optolink:
-  serial_port: '/dev/ttyUSB0'     # Serial port for Optolink device (mandatory, default: '/dev/ttyUSB0')
-  show_received_bytes: False      # Useful for debugging purposes only
-  reconnect_period_sec: 5         # Period (in seconds) to wait before reconnecting to Optolink device if connection is lost
-  reconnect_timeout_sec: 60        # Give up (and exit with an error) if the Optolink serial port cannot be (re)opened within this time
+  # Serial port for Optolink device (mandatory, default: '/dev/ttyUSB0')
+  serial_port: '/dev/ttyUSB0'
+  # Useful for debugging purposes only
+  show_received_bytes: False
+  # Period (in seconds) to wait before reconnecting to Optolink device if connection is lost;
+  # Since apparently optolink traffic can prevent Viessmann devices from booting properly after
+  # a power cycle (see issue #37), it's recommended to keep the reconnect period to be at least 1minute
+  # so that if a power cycle of the Viessmann device is happening, its boot process won't be interrupted by Optolink traffic.
+  reconnect_period_sec: 60
+  # Give up (and exit with an error) if the Optolink serial port cannot be (re)opened 
+  # within this time
+  reconnect_timeout_sec: 600
   max_consecutive_failures_before_reinit: 3  # Re-initialize the VS2 protocol after this many consecutive read/write failures (e.g. after a heat pump power cycle)
 
 mqtt:
@@ -60,7 +68,7 @@ mqtt:
 
   ha_discovery:
     # ha_discovery.enabled: if set to true, optolink2mqtt will publish a "homeassistant" MQTT discovery topic
-    # for each task having the 'ha_discovery' configuration parameters set.
+    # for each register having the 'ha_discovery' configuration parameters set in the "registers_poll_list" list.
     # This will enable HomeAssistant to immediately recognize as sensors the information published by optolink2mqtt
     # (see https://www.home-assistant.io/integrations/sensor.mqtt/)
     enabled: true
