@@ -25,6 +25,11 @@ from .optolinkvs2_protocol import OptolinkVS2Protocol
 from .optolinkvs2_register import OptolinkVS2Register
 
 
+# Minimum time between VS2 re-initialization attempts: continuous attempts would
+# prevent a power-cycled heat pump from completing its own boot sequence.
+MIN_REINIT_INTERVAL_SEC = 60
+
+
 class OptolinkInterface:
     """
     Wraps the OptolinkVS2Protocol and implements serial port opening,
@@ -50,6 +55,7 @@ class OptolinkInterface:
         self.protocol = None  # instance of OptolinkVS2Protocol
         self.reconn_attempts = 0
         self.consecutive_failures = 0
+        self.last_reinit_time = None  # monotonic time of last VS2 re-init attempt
 
     def is_connected(self) -> bool:
         return self.protocol is not None
@@ -122,6 +128,13 @@ class OptolinkInterface:
 
         self.consecutive_failures += 1
         if self.consecutive_failures >= self.max_consecutive_failures_before_reinit:
+            now = time.monotonic()
+            if (
+                self.last_reinit_time is not None
+                and now - self.last_reinit_time < MIN_REINIT_INTERVAL_SEC
+            ):
+                return
+            self.last_reinit_time = now
             logging.warning(
                 f"{self.consecutive_failures} consecutive Optolink failures; re-initializing VS2 protocol..."
             )
