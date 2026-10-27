@@ -16,6 +16,11 @@ optolink:
   reconnect_period_sec: int(required=False)
   reconnect_timeout_sec: int(required=False)
   max_consecutive_failures_before_reinit: int(required=False, min=1)
+  connection_status_ha_discovery: include('optolink_connection_status_ha_discovery',required=False)
+---
+optolink_connection_status_ha_discovery:
+  enabled: bool(required=False)
+  name: str(required=False)
 ---
 mqtt:
   broker: include('mqtt_broker')
