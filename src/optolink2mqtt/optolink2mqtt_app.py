@@ -508,6 +508,7 @@ class Optolink2MqttApp:
         # at the start of the application we need to establish the Optolink connection
         # and that might be required later on as well in case of serial port errors
         new_optolink_conn_required = True
+        serial_reconn_attempts = 0
 
         # block the main thread on the MQTT client loop
         self.keep_running = True
@@ -518,35 +519,15 @@ class Optolink2MqttApp:
                     # create OptolinkVS2Protocol interface
                     #
                     serial_port_name = self.config.config["optolink"]["serial_port"]
-                    reconn_period_sec = self.config.config["optolink"][
-                        "reconnect_period_sec"
-                    ]
-                    reconn_timeout_sec = self.config.config["optolink"][
-                        "reconnect_timeout_sec"
-                    ]
-                    deadline = time.monotonic() + reconn_timeout_sec
-                    while True:
-                        try:
-                            ser = serial.Serial(
-                                serial_port_name,
-                                baudrate=4800,
-                                bytesize=8,
-                                parity="E",
-                                stopbits=2,
-                                timeout=0,
-                                exclusive=True,
-                            )
-                            break
-                        except serial.SerialException as e:
-                            if time.monotonic() + reconn_period_sec > deadline:
-                                logging.error(
-                                    f"Cannot open serial port {serial_port_name}: {e}. Giving up after {reconn_timeout_sec} sec. Aborting."
-                                )
-                                return 1
-                            logging.error(
-                                f"Cannot open serial port {serial_port_name}: {e}. Retrying in {reconn_period_sec} sec..."
-                            )
-                            time.sleep(reconn_period_sec)
+                    ser = serial.Serial(
+                        serial_port_name,
+                        baudrate=4800,
+                        bytesize=8,
+                        parity="E",
+                        stopbits=2,
+                        timeout=0,
+                        exclusive=True,
+                    )
 
                     self.optolink_interface = OptolinkVS2Protocol(
                         ser,
@@ -560,6 +541,7 @@ class Optolink2MqttApp:
                         return 2
 
                     new_optolink_conn_required = False
+                    serial_reconn_attempts = 0
 
                     # immediately after a new Optolink connection is established,
                     # publish all registers to MQTT
@@ -588,8 +570,19 @@ class Optolink2MqttApp:
                 reconn_period_sec = self.config.config["optolink"][
                     "reconnect_period_sec"
                 ]
+                reconn_timeout_sec = self.config.config["optolink"][
+                    "reconnect_timeout_sec"
+                ]
+                max_attempts = max(1, int(reconn_timeout_sec / reconn_period_sec))
+                serial_reconn_attempts += 1
+                if serial_reconn_attempts > max_attempts:
+                    logging.error(
+                        f"serial port error caught: {e}; giving up after {max_attempts} reconnection attempts. Aborting."
+                    )
+                    return 1
                 logging.error(
-                    f"serial port error caught: {e}, sleeping for {reconn_period_sec} sec..."
+                    f"serial port error caught: {e}, sleeping for {reconn_period_sec} sec "
+                    f"(reconnection attempt {serial_reconn_attempts}/{max_attempts})..."
                 )
                 new_optolink_conn_required = True
                 time.sleep(reconn_period_sec)
