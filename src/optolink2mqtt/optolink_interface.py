@@ -63,7 +63,7 @@ class OptolinkInterface:
 
         self.protocol = None
 
-        # the following ctor might raise serial.SerialException (or termios.error) 
+        # the following ctor might raise serial.SerialException (or termios.error)
         # if the port cannot be opened -- we expect the caller to invoke our
         # handle_serial_error() method to deal with it if needed.
         ser = serial.Serial(
