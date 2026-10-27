@@ -62,6 +62,10 @@ class OptolinkInterface:
         """
 
         self.protocol = None
+
+        # the following ctor might raise serial.SerialException (or termios.error) 
+        # if the port cannot be opened -- we expect the caller to invoke our
+        # handle_serial_error() method to deal with it if needed.
         ser = serial.Serial(
             self.serial_port,
             baudrate=4800,
@@ -78,6 +82,8 @@ class OptolinkInterface:
             self.show_received_bytes,
         )
         if not protocol.init_vs2():
+            # this is a critical error, cannot proceed with the connection
+            # ask the caller to bail out of the whole application
             logging.error("Cannot initialize Optolink VS2 protocol.")
             return False
 
