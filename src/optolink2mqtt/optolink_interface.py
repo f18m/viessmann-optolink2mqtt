@@ -19,10 +19,16 @@ limitations under the License.
 
 import logging
 import time
+from typing import Optional
+
 import serial
 
 from .optolinkvs2_protocol import OptolinkVS2Protocol
 from .optolinkvs2_register import OptolinkVS2Register
+
+
+class OptolinkReinitializationRequired(Exception):
+    """Raised when consecutive Optolink failures require reconnecting VS2."""
 
 
 class OptolinkInterface:
@@ -49,6 +55,7 @@ class OptolinkInterface:
 
         self.protocol = None  # instance of OptolinkVS2Protocol
         self.reconn_attempts = 0
+        self.reconn_started_at: Optional[float] = None
         self.consecutive_failures = 0
 
     def is_connected(self) -> bool:
@@ -58,7 +65,7 @@ class OptolinkInterface:
         """
         Opens the serial port and initializes the VS2 protocol.
         Raises serial.SerialException (or termios.error) if the port cannot be opened.
-        Returns False if the VS2 protocol initialization fails.
+        Returns False if VS2 protocol initialization fails; the caller handles retries.
         """
 
         self.protocol = None
@@ -82,44 +89,58 @@ class OptolinkInterface:
             self.show_received_bytes,
         )
         if not protocol.init_vs2():
-            # this is a critical error, cannot proceed with the connection
-            # ask the caller to bail out of the whole application
+            # The caller decides whether to retry or abort based on the configured timeout.
             logging.error("Cannot initialize Optolink VS2 protocol.")
             return False
 
         self.protocol = protocol
         self.reconn_attempts = 0
+        self.reconn_started_at = None
         self.consecutive_failures = 0
         return True
 
-    def handle_serial_error(self, e: Exception) -> bool:
+    def handle_serial_error(self, e: Exception) -> Optional[float]:
         """
-        To be invoked when a serial port error is caught: drops the current connection,
-        sleeps for the reconnection period and tells whether a new attempt must be done.
-        Returns False when the maximum number of reconnection attempts has been exceeded.
+        Records a serial error, drops the current connection, and returns the delay
+        before retrying. A timeout of zero means retry indefinitely; otherwise returns
+        None when the configured reconnection timeout expires.
         """
 
-        max_attempts = max(
-            1, int(self.reconnect_timeout_sec / self.reconnect_period_sec)
-        )
-        self.reconn_attempts += 1
-        if self.reconn_attempts > max_attempts:
+        if self.reconnect_timeout_sec == 0:
+            self.reconn_attempts += 1
             logging.error(
-                f"serial port error caught: {e}; giving up after {max_attempts} reconnection attempts. Aborting."
+                f"Optolink error caught: {e}; retrying in "
+                f"{self.reconnect_period_sec} sec "
+                f"(reconnection attempt {self.reconn_attempts}; timeout disabled)..."
             )
-            return False
+            self.protocol = None
+            return self.reconnect_period_sec
+
+        if self.reconn_started_at is None:
+            self.reconn_started_at = time.monotonic()
+
+        elapsed_sec = time.monotonic() - self.reconn_started_at
+        remaining_sec = self.reconnect_timeout_sec - elapsed_sec
+        if remaining_sec <= 0:
+            logging.error(
+                f"Optolink error caught: {e}; reconnect timeout of "
+                f"{self.reconnect_timeout_sec} sec exceeded. Aborting."
+            )
+            return None
+
+        self.reconn_attempts += 1
+        delay_sec = min(self.reconnect_period_sec, remaining_sec)
         logging.error(
-            f"serial port error caught: {e}, sleeping for {self.reconnect_period_sec} sec "
-            f"(reconnection attempt {self.reconn_attempts}/{max_attempts})..."
+            f"Optolink error caught: {e}; retrying in {delay_sec} sec "
+            f"(reconnection attempt {self.reconn_attempts}; timeout in "
+            f"{remaining_sec} sec)..."
         )
         self.protocol = None
-        time.sleep(self.reconnect_period_sec)
-        return True
+        return delay_sec
 
     def _track_result(self, rx_data) -> None:
         """
-        Counts consecutive failures; after too many of them (e.g. the heat pump was
-        power-cycled and lost the VS2 protocol state) the VS2 protocol is initialized again.
+        Counts consecutive failures and requests a reconnect after too many of them.
         """
 
         if rx_data.is_successful():
@@ -129,10 +150,11 @@ class OptolinkInterface:
         self.consecutive_failures += 1
         if self.consecutive_failures >= self.max_consecutive_failures_before_reinit:
             logging.warning(
-                f"{self.consecutive_failures} consecutive Optolink failures; re-initializing VS2 protocol..."
+                f"{self.consecutive_failures} consecutive Optolink failures; requesting VS2 re-initialization..."
             )
-            if self.protocol.init_vs2():
-                self.consecutive_failures = 0
+            raise OptolinkReinitializationRequired(
+                f"{self.consecutive_failures} consecutive Optolink failures"
+            )
 
     def sample_register(self, reg: OptolinkVS2Register):
         """
@@ -140,14 +162,15 @@ class OptolinkInterface:
         """
 
         rx_data = self.protocol.read_datapoint_ext(reg.address, reg.length)
-        self._track_result(rx_data)
         if not rx_data.is_successful():
             # NOTE that the error is already logged inside OptolinkVS2Protocol
             #      which also maintains error counters
             logging.error(
                 f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code {int(rx_data.receive_code)} ({rx_data.receive_code.name})"
             )
+            self._track_result(rx_data)
             return None
+        self._track_result(rx_data)
         return reg.get_value_from_rawdata(rx_data.data)
 
     def write_register(self, reg: OptolinkVS2Register, raw_data: bytes) -> bool:
@@ -156,12 +179,13 @@ class OptolinkInterface:
         """
 
         rx_data = self.protocol.write_datapoint_ext(reg.address, raw_data)
-        self._track_result(rx_data)
         if rx_data.is_successful():
+            self._track_result(rx_data)
             return True
         logging.error(
             f"Failed to write register '{reg.name}' (addr=0x{reg.address:04x}): error code {int(rx_data.receive_code)} ({rx_data.receive_code.name})"
         )
+        self._track_result(rx_data)
         return False
 
     def get_total_rx_frames(self) -> int:
