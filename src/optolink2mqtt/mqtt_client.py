@@ -56,6 +56,10 @@ class MqttClient:
     # Constant values indicating the last-will MQTT topic & payload
     OPTOLINK2MQTT_STATUS_TOPIC = "optolink2mqtt_status"
 
+    OPTOLINK_CONNECTION_STATUS_TOPIC = "optolink"
+    OPTOLINK_CONNECTED_PAYLOAD = "connected"
+    OPTOLINK_DISCONNECTED_PAYLOAD = "disconnected"
+
     NEW_CONN_PAYLOAD = "online"
     LAST_WILL_PAYLOAD = "offline"
 
@@ -232,6 +236,16 @@ class MqttClient:
         Returns the topic used to publish metrics related to OPTOLINK2MQTT itself
         """
         return self.topic_prefix + MqttClient.OPTOLINK2MQTT_STATUS_TOPIC
+
+    def get_optolink_connection_status_topic(self) -> str:
+        """
+        Returns the topic used to publish whether the Optolink device is connected (ON/OFF)
+        """
+        return (
+            self.get_optolink2mqtt_status_topic()
+            + "/"
+            + MqttClient.OPTOLINK_CONNECTION_STATUS_TOPIC
+        )
 
     def get_human_friendly_stats(self) -> str:
         success_perc = (
