@@ -175,13 +175,6 @@ class Config:
         if "max_consecutive_failures_before_reinit" not in m:
             m["max_consecutive_failures_before_reinit"] = 3
 
-        # optolink.connection_status_ha_discovery object
-        c = m.setdefault("connection_status_ha_discovery", {})
-        if "enabled" not in c:
-            c["enabled"] = True
-        if "name" not in c:
-            c["name"] = "Opto Connection Status"
-
     def _fill_defaults_logging(self):
         # logging
         if "logging" not in self.config:

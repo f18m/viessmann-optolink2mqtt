@@ -172,18 +172,14 @@ class Optolink2MqttApp:
         Publishes the discovery message of the binary_sensor reporting the Optolink connection status.
         Returns the number of messages published.
         """
-        cfg = self.config.config["optolink"]["connection_status_ha_discovery"]
-        if not cfg["enabled"]:
-            return 0
-
         unique_id = f"{ha_device_name}-optolink-connection-status"
         payload = {
-            "name": cfg["name"],
+            "name": "Opto Connection Status",
             "unique_id": unique_id,
             "device": device_dict,
             "state_topic": self.mqtt_client.get_optolink_connection_status_topic(),
-            "payload_on": "ON",
-            "payload_off": "OFF",
+            "payload_on": MqttClient.OPTOLINK_CONNECTED_PAYLOAD,
+            "payload_off": MqttClient.OPTOLINK_DISCONNECTED_PAYLOAD,
             "device_class": "connectivity",
             "entity_category": "diagnostic",
             "availability_topic": self.mqtt_client.get_optolink2mqtt_status_topic(),
@@ -200,14 +196,14 @@ class Optolink2MqttApp:
         Publishes (retained) the Optolink connection status when it changes
         or when a new MQTT connection was established.
         """
-        if not self.config.config["optolink"]["connection_status_ha_discovery"][
-            "enabled"
-        ]:
-            return
         if not self.mqtt_client.is_connected():
             return
         conn_id = self.mqtt_client.get_connection_id()
-        status = "ON" if self.optolink_interface.is_connected() else "OFF"
+        status = (
+            MqttClient.OPTOLINK_CONNECTED_PAYLOAD
+            if self.optolink_interface.is_connected()
+            else MqttClient.OPTOLINK_DISCONNECTED_PAYLOAD
+        )
         if (
             force
             or status != self.last_connection_status

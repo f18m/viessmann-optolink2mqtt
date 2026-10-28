@@ -22,11 +22,6 @@ optolink:
   reconnect_period_sec: 5         # Period (in seconds) to wait before reconnecting to Optolink device if connection is lost
   reconnect_timeout_sec: 60        # Give up (and exit with an error) if the Optolink serial port cannot be (re)opened within this time
   max_consecutive_failures_before_reinit: 3  # Re-initialize the VS2 protocol after this many consecutive read/write failures (e.g. after a heat pump power cycle)
-  connection_status_ha_discovery:
-    # Publish a HomeAssistant binary_sensor (ON/OFF) telling whether optolink2mqtt is connected to the Viessmann device;
-    # the discovery message is published only if mqtt.ha_discovery.enabled is true
-    enabled: true
-    name: 'Opto Connection Status'
 
 mqtt:
   # broker: details about the MQTT broker
