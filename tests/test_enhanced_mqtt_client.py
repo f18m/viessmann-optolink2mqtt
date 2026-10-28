@@ -83,7 +83,7 @@ def test_discovery_messages_are_published_after_broker_connection(monkeypatch):
     register.get_ha_discovery_payload.assert_called_once()
     assert register.get_ha_discovery_payload.call_args.args[1] == "1.2.3"
     assert register.get_ha_discovery_payload.call_args.args[3] == 30
-    assert paho_client.publish.call_count == 2
+    assert paho_client.publish.call_count == 4
 
     connection_status_topic, connection_status_payload = (
         paho_client.publish.call_args_list[1].args[:2]
@@ -93,8 +93,34 @@ def test_discovery_messages_are_published_after_broker_connection(monkeypatch):
     )
     assert json.loads(connection_status_payload)["name"] == "Opto Connection Status"
 
+    mqtt_sensor_topic, mqtt_sensor_payload = paho_client.publish.call_args_list[2].args[
+        :2
+    ]
+    mqtt_sensor_config = json.loads(mqtt_sensor_payload)
+    assert mqtt_sensor_topic == (
+        "homeassistant/sensor/device/device-num-mqtt-disconnects/config"
+    )
+    assert mqtt_sensor_config["state_topic"] == (
+        "optolink2mqtt/optolink2mqtt_status/num_mqtt_disconnects"
+    )
+    assert mqtt_sensor_config["state_class"] == "total_increasing"
+    assert mqtt_sensor_config["entity_category"] == "diagnostic"
+
+    optolink_sensor_topic, optolink_sensor_payload = paho_client.publish.call_args_list[
+        3
+    ].args[:2]
+    optolink_sensor_config = json.loads(optolink_sensor_payload)
+    assert optolink_sensor_topic == (
+        "homeassistant/sensor/device/device-num-optolink-errors/config"
+    )
+    assert optolink_sensor_config["state_topic"] == (
+        "optolink2mqtt/optolink2mqtt_status/num_optolink_errors"
+    )
+    assert optolink_sensor_config["state_class"] == "total_increasing"
+    assert optolink_sensor_config["entity_category"] == "diagnostic"
+
     assert discovery_client.check_if_time_to_send_discovery_messages() is False
-    assert paho_client.publish.call_count == 2
+    assert paho_client.publish.call_count == 4
 
 
 def test_ha_restart_requests_discovery_and_register_refresh(monkeypatch):
@@ -107,7 +133,30 @@ def test_ha_restart_requests_discovery_and_register_refresh(monkeypatch):
     assert discovery_client.check_if_time_to_send_discovery_messages() is True
     discovery_client._mqtt_client._ha_discovery_messages_requested = True
     assert discovery_client.check_if_time_to_send_discovery_messages() is True
+    assert paho_client.publish.call_count == 6
+
+
+def test_status_metrics_publish_on_client_owned_topics(monkeypatch):
+    client, paho_client = create_client(
+        monkeypatch,
+        {"enabled": False, "topic": "homeassistant", "device_name": "device"},
+        [],
+    )
+    monkeypatch.setattr("optolink2mqtt.mqtt_client.MqttClient.num_disconnects", 3)
+
+    client.publish_status_metrics(7)
+
     assert paho_client.publish.call_count == 2
+    assert paho_client.publish.call_args_list[0].args[:2] == (
+        "optolink2mqtt/optolink2mqtt_status/num_mqtt_disconnects",
+        "3",
+    )
+    assert paho_client.publish.call_args_list[0].kwargs["retain"] is True
+    assert paho_client.publish.call_args_list[1].args[:2] == (
+        "optolink2mqtt/optolink2mqtt_status/num_optolink_errors",
+        "7",
+    )
+    assert paho_client.publish.call_args_list[1].kwargs["retain"] is True
 
 
 def test_optolink_connection_status_is_published_only_when_needed(monkeypatch):
