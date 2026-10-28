@@ -123,18 +123,10 @@ class Optolink2MqttApp:
         new_status = (
             app.enhanced_mqtt_client.get_num_disconnects(),
             app.optolink_interface.get_total_rx_frames(),
+            app.optolink_interface.get_total_errors(),
         )
         if new_status != app.last_logged_status:
-            # publish status on MQTT
-            status_topic = app.enhanced_mqtt_client.get_optolink2mqtt_status_topic()
-            app.enhanced_mqtt_client.publish_retained(
-                status_topic + "/num_mqtt_disconnects",
-                app.enhanced_mqtt_client.get_num_disconnects(),
-            )
-            app.enhanced_mqtt_client.publish_retained(
-                status_topic + "/num_optolink_errors",
-                app.optolink_interface.get_total_errors(),
-            )
+            app.enhanced_mqtt_client.publish_status_metrics(new_status[2])
 
             # publish status on log
             app.log_status()
@@ -303,7 +295,7 @@ class Optolink2MqttApp:
         log_period_sec = int(self.config.config["logging"]["report_status_period_sec"])
         if log_period_sec > 0:
             logging.info(
-                f"optolink2mqtt status will be published on topic {self.enhanced_mqtt_client.get_optolink2mqtt_status_topic()} every {log_period_sec}sec"
+                f"optolink2mqtt status metrics will be published every {log_period_sec}sec"
             )
             self.scheduler.enter(
                 log_period_sec,
