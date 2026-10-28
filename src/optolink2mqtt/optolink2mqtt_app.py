@@ -453,14 +453,16 @@ class Optolink2MqttApp:
             try:
                 if new_optolink_conn_required:
                     self.optolink_interface.connect()
+
+                    # if we get here, the Optolink connection was successfully established
+                    logging.warning(
+                        "New Optolink connection established; publishing all sensor values (regardless of their schedule)..."
+                    )
                     new_optolink_conn_required = False
                     self._publish_connection_status()
 
                     # immediately after a new Optolink connection is established,
                     # publish all registers to MQTT
-                    logging.warning(
-                        "New Optolink connection established; publishing all sensor values (regardless of their schedule)..."
-                    )
                     self._sample_all_registers()
 
                 # restart the MQTT client secondary thread in case it was never started or failed for some reason
@@ -496,7 +498,11 @@ class Optolink2MqttApp:
                     return 2 if isinstance(e, OptolinkConnectionFailed) else 1
 
                 time.sleep(reconnect_delay_sec)
+
+                # ask for a new optolink connection on the next loop iteration
                 new_optolink_conn_required = True
+
+                # update the connection status on MQTT to reflect the failed Optolink connection
                 self._publish_connection_status()
 
             except KeyboardInterrupt:
