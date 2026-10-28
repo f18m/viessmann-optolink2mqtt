@@ -449,6 +449,9 @@ class Optolink2MqttApp:
 
         # block the main thread on the MQTT client loop
         self.keep_running = True
+        # Start MQTT processing before Optolink setup so failures during startup can
+        # publish status metrics while the interface is retrying.
+        self.enhanced_mqtt_client.loop_start()
         while self.keep_running:
             try:
                 if new_optolink_conn_required:
@@ -464,9 +467,6 @@ class Optolink2MqttApp:
                     # immediately after a new Optolink connection is established,
                     # publish all registers to MQTT
                     self._sample_all_registers()
-
-                # restart the MQTT client secondary thread in case it was never started or failed for some reason
-                self.enhanced_mqtt_client.loop_start()
 
                 # run till an exception is thrown:
                 self._core_loop()

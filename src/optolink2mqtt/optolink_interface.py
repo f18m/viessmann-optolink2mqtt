@@ -58,6 +58,8 @@ class OptolinkInterface:
         )
 
         self.protocol = None  # instance of OptolinkVS2Protocol
+        self._previous_protocol_errors = 0
+        self._failed_initializations = 0
         self.reconn_attempts = 0
         self.reconn_started_at: Optional[float] = None
         self.consecutive_failures = 0
@@ -72,7 +74,7 @@ class OptolinkInterface:
         Raises OptolinkConnectionFailed if VS2 protocol initialization fails.
         """
 
-        self.protocol = None
+        self._discard_protocol()
 
         # the following ctor might raise serial.SerialException (or termios.error)
         # if the port cannot be opened -- we expect the caller to invoke our
@@ -93,6 +95,7 @@ class OptolinkInterface:
             self.show_received_bytes,
         )
         if not protocol.init_vs2():
+            self._failed_initializations += 1
             logging.error("Cannot initialize Optolink VS2 protocol.")
             raise OptolinkConnectionFailed(
                 "Cannot initialize Optolink VS2 protocol"
@@ -103,6 +106,11 @@ class OptolinkInterface:
         self.reconn_started_at = None
         self.consecutive_failures = 0
         return True
+
+    def _discard_protocol(self) -> None:
+        if self.protocol is not None:
+            self._previous_protocol_errors += self.protocol.get_total_errors()
+            self.protocol = None
 
     def handle_serial_error(self, e: Exception) -> Optional[float]:
         """
@@ -118,7 +126,7 @@ class OptolinkInterface:
                 f"{self.reconnect_period_sec} sec "
                 f"(reconnection attempt {self.reconn_attempts}; timeout disabled)..."
             )
-            self.protocol = None
+            self._discard_protocol()
             return self.reconnect_period_sec
 
         if self.reconn_started_at is None:
@@ -140,7 +148,7 @@ class OptolinkInterface:
             f"(reconnection attempt {self.reconn_attempts}; timeout in "
             f"{remaining_sec} sec)..."
         )
-        self.protocol = None
+        self._discard_protocol()
         return delay_sec
 
     def _track_result(self, rx_data) -> None:
@@ -197,7 +205,14 @@ class OptolinkInterface:
         return self.protocol.get_total_rx_frames() if self.protocol else 0
 
     def get_total_errors(self) -> int:
-        return self.protocol.get_total_errors() if self.protocol else 0
+        current_protocol_errors = (
+            self.protocol.get_total_errors() if self.protocol else 0
+        )
+        return (
+            self._previous_protocol_errors
+            + self._failed_initializations
+            + current_protocol_errors
+        )
 
     def get_human_friendly_stats(self) -> str:
         return self.protocol.get_human_friendly_stats() if self.protocol else ""
