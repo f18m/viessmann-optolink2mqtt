@@ -32,7 +32,11 @@ import serial
 
 from .config import Config
 from .enhanced_mqtt_client import EnhancedMqttClient
-from .optolink_interface import OptolinkInterface, OptolinkReinitializationRequired
+from .optolink_interface import (
+    OptolinkConnectionFailed,
+    OptolinkInterface,
+    OptolinkReinitializationRequired,
+)
 from .optolinkvs2_register import OptolinkVS2Register
 
 
@@ -448,18 +452,7 @@ class Optolink2MqttApp:
         while self.keep_running:
             try:
                 if new_optolink_conn_required:
-                    if not self.optolink_interface.connect():
-                        error = RuntimeError(
-                            "Cannot initialize Optolink VS2 protocol"
-                        )
-                        reconnect_delay_sec = (
-                            self.optolink_interface.handle_serial_error(error)
-                        )
-                        if reconnect_delay_sec is None:
-                            return 2
-                        time.sleep(reconnect_delay_sec)
-                        continue
-
+                    self.optolink_interface.connect()
                     new_optolink_conn_required = False
                     self._publish_connection_status()
 
@@ -486,6 +479,7 @@ class Optolink2MqttApp:
 
             # try to recover from SERIAL/OPTOLINK exceptions:
             except (
+                OptolinkConnectionFailed,
                 OptolinkReinitializationRequired,
                 termios.error,
                 serial.SerialException,
@@ -499,10 +493,12 @@ class Optolink2MqttApp:
                 reconnect_delay_sec = self.optolink_interface.handle_serial_error(e)
                 if reconnect_delay_sec is None:
                     # exceeded max time for reconnecting... exit the application
-                    return 1
+                    return 2 if isinstance(e, OptolinkConnectionFailed) else 1
+
                 time.sleep(reconnect_delay_sec)
                 new_optolink_conn_required = True
                 self._publish_connection_status()
+
             except KeyboardInterrupt:
                 logging.warning("KeyboardInterrupt caught, exiting")
                 break

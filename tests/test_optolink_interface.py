@@ -8,6 +8,7 @@ SRC_DIR = os.path.realpath(THIS_SCRIPT_DIR + "/../src")
 sys.path.append(SRC_DIR)
 
 from optolink2mqtt.optolink_interface import (  # noqa: E402
+    OptolinkConnectionFailed,
     OptolinkInterface,
     OptolinkReinitializationRequired,
 )
@@ -169,6 +170,93 @@ def test_run_handles_reinitialization_exception_through_reconnect_path(monkeypat
     app.enhanced_mqtt_client.publish_status_metrics.assert_called_once_with(3)
     assert app.optolink_interface.connect.call_count == 2
     sleep.assert_called_once_with(2)
+
+
+def test_run_handles_failed_connect_through_shared_optolink_handler(monkeypatch):
+    app = Optolink2MqttApp()
+    app.config = Mock()
+    app.config.config = {
+        "mqtt": {
+            "broker": {
+                "host": "localhost",
+                "port": 1883,
+                "username": None,
+                "password": None,
+            }
+        }
+    }
+    app.enhanced_mqtt_client = Mock()
+    app.optolink_interface = Mock()
+    app.optolink_interface.connect.side_effect = [
+        OptolinkConnectionFailed("Cannot initialize Optolink VS2 protocol"),
+        True,
+    ]
+    app.optolink_interface.handle_serial_error.return_value = 2
+    app.register_list_by_cmd_topic = {}
+    app._sample_all_registers = Mock()
+    app._publish_connection_status = Mock()
+    app.log_status = Mock()
+    sleep = Mock()
+    monkeypatch.setattr("optolink2mqtt.optolink2mqtt_app.time.sleep", sleep)
+
+    def core_loop():
+        app.keep_running = False
+
+    app._core_loop = core_loop
+
+    assert app.run() == 0
+
+    error = app.optolink_interface.handle_serial_error.call_args.args[0]
+    assert isinstance(error, OptolinkConnectionFailed)
+    assert app.optolink_interface.connect.call_count == 2
+    sleep.assert_called_once_with(2)
+
+
+def test_run_returns_initialization_error_code_after_reconnect_timeout():
+    app = Optolink2MqttApp()
+    app.config = Mock()
+    app.config.config = {
+        "mqtt": {
+            "broker": {
+                "host": "localhost",
+                "port": 1883,
+                "username": None,
+                "password": None,
+            }
+        }
+    }
+    app.enhanced_mqtt_client = Mock()
+    app.optolink_interface = Mock()
+    app.optolink_interface.connect.side_effect = OptolinkConnectionFailed(
+        "Cannot initialize Optolink VS2 protocol"
+    )
+    app.optolink_interface.handle_serial_error.return_value = None
+    app.register_list_by_cmd_topic = {}
+
+    assert app.run() == 2
+    error = app.optolink_interface.handle_serial_error.call_args.args[0]
+    assert isinstance(error, OptolinkConnectionFailed)
+
+
+def test_connect_raises_when_vs2_initialization_fails(monkeypatch):
+    interface = create_interface()
+    monkeypatch.setattr(
+        "optolink2mqtt.optolink_interface.serial.Serial",
+        Mock(return_value=Mock()),
+    )
+    protocol = Mock()
+    protocol.init_vs2.return_value = False
+    monkeypatch.setattr(
+        "optolink2mqtt.optolink_interface.OptolinkVS2Protocol",
+        Mock(return_value=protocol),
+    )
+
+    try:
+        interface.connect()
+    except OptolinkConnectionFailed as error:
+        assert str(error) == "Cannot initialize Optolink VS2 protocol"
+    else:
+        raise AssertionError("Expected failed VS2 initialization to raise")
 
 
 def test_core_loop_raises_mqtt_disconnect_for_run_to_handle():

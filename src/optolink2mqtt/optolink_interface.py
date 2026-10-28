@@ -31,6 +31,10 @@ class OptolinkReinitializationRequired(Exception):
     """Raised when consecutive Optolink failures require reconnecting VS2."""
 
 
+class OptolinkConnectionFailed(Exception):
+    """Raised when the VS2 protocol cannot be initialized."""
+
+
 class OptolinkInterface:
     """
     Wraps the OptolinkVS2Protocol and implements serial port opening,
@@ -65,7 +69,7 @@ class OptolinkInterface:
         """
         Opens the serial port and initializes the VS2 protocol.
         Raises serial.SerialException (or termios.error) if the port cannot be opened.
-        Returns False if VS2 protocol initialization fails; the caller handles retries.
+        Raises OptolinkConnectionFailed if VS2 protocol initialization fails.
         """
 
         self.protocol = None
@@ -89,9 +93,10 @@ class OptolinkInterface:
             self.show_received_bytes,
         )
         if not protocol.init_vs2():
-            # The caller decides whether to retry or abort based on the configured timeout.
             logging.error("Cannot initialize Optolink VS2 protocol.")
-            return False
+            raise OptolinkConnectionFailed(
+                "Cannot initialize Optolink VS2 protocol"
+            )
 
         self.protocol = protocol
         self.reconn_attempts = 0
