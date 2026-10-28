@@ -14,6 +14,11 @@ def test_rejected_connection_does_not_publish_or_subscribe(caplog, monkeypatch):
     from optolink2mqtt.mqtt_client import MqttClient
 
     disconnect_count = MqttClient.num_disconnects
+    transport = Mock()
+    monkeypatch.setattr(
+        "optolink2mqtt.mqtt_client.paho.Client",
+        Mock(return_value=transport),
+    )
     client = MqttClient(
         queue.Queue(),
         "test-client",
@@ -25,10 +30,9 @@ def test_rejected_connection_does_not_publish_or_subscribe(caplog, monkeypatch):
         5,
         "homeassistant/status",
     )
-    client._mqttc = Mock()
 
     client.on_connect(
-        client._mqttc,
+        transport,
         client,
         Mock(),
         5,
@@ -36,13 +40,15 @@ def test_rejected_connection_does_not_publish_or_subscribe(caplog, monkeypatch):
     )
 
     assert "MQTT broker rejected connection" in caplog.text
-    client._mqttc.publish.assert_not_called()
-    client._mqttc.subscribe.assert_not_called()
+    transport.publish.assert_not_called()
+    transport.subscribe.assert_not_called()
+    transport.reconnect_delay_set.assert_called_once_with(
+        min_delay=5,
+        max_delay=5,
+    )
 
-    retry_sleep = Mock()
-    monkeypatch.setattr("optolink2mqtt.mqtt_client.time.sleep", retry_sleep)
     client.on_disconnect(
-        client._mqttc,
+        transport,
         client,
         Mock(is_disconnect_packet_from_server=False),
         paho.convert_disconnect_error_code_to_reason_code(
@@ -53,7 +59,8 @@ def test_rejected_connection_does_not_publish_or_subscribe(caplog, monkeypatch):
 
     assert "OOOOPS!" not in caplog.text
     assert MqttClient.num_disconnects == disconnect_count
-    retry_sleep.assert_called_once_with(client.reconnect_period_sec)
-    client._mqttc.publish.assert_not_called()
-    client._mqttc.subscribe.assert_not_called()
+    assert client.consume_disconnect_notification() is True
+    assert client.consume_disconnect_notification() is False
+    transport.publish.assert_not_called()
+    transport.subscribe.assert_not_called()
     assert client._connection_rejected is False
