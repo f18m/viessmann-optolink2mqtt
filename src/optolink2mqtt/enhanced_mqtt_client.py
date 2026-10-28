@@ -35,6 +35,9 @@ logger = logging.getLogger(__name__)
 class EnhancedMqttClient:
     """Wraps MQTT transport and HomeAssistant discovery behavior."""
 
+    NUM_MQTT_DISCONNECTS_TOPIC = "num_mqtt_disconnects"
+    NUM_OPTOLINK_ERRORS_TOPIC = "num_optolink_errors"
+
     def __init__(
         self,
         message_queue: queue.Queue,
@@ -139,6 +142,46 @@ class EnhancedMqttClient:
             self._last_connection_status = status
             self._last_connection_status_connection_id = conn_id
 
+    def publish_status_metrics(self, num_optolink_errors: int) -> None:
+        """Publish the diagnostic counters and their stable MQTT state topics."""
+        self.publish_retained(
+            self._get_status_metric_topic(self.NUM_MQTT_DISCONNECTS_TOPIC),
+            str(self.get_num_disconnects()),
+        )
+        self.publish_retained(
+            self._get_status_metric_topic(self.NUM_OPTOLINK_ERRORS_TOPIC),
+            str(num_optolink_errors),
+        )
+
+    def _get_status_metric_topic(self, metric_name: str) -> str:
+        return f"{self.get_optolink2mqtt_status_topic()}/{metric_name}"
+
+    def _publish_status_sensor_discovery(
+        self, device: dict[str, Any], metric_name: str, sensor_name: str
+    ) -> None:
+        unique_id = f"{self.device_name}-{metric_name.replace('_', '-')}"
+        payload = {
+            "name": sensor_name,
+            "unique_id": unique_id,
+            "device": device,
+            "origin": {
+                "name": "optolink2mqtt",
+                "sw": self.optolink2mqtt_version,
+                "url": "https://github.com/f18m/viessmann-optolink2mqtt",
+            },
+            "state_topic": self._get_status_metric_topic(metric_name),
+            "state_class": "total_increasing",
+            "entity_category": "diagnostic",
+            "availability_topic": self.get_optolink2mqtt_status_topic(),
+            "payload_available": MqttClient.NEW_CONN_PAYLOAD,
+            "payload_not_available": MqttClient.LAST_WILL_PAYLOAD,
+        }
+        topic = (
+            f"{self.discovery_topic}/sensor/" f"{self.device_name}/{unique_id}/config"
+        )
+        logger.info("Publishing an MQTT discovery message on topic '%s'", topic)
+        self.publish(topic, json.dumps(payload))
+
     def _publish_connection_status_discovery(self, device: dict[str, Any]) -> None:
         unique_id = f"{self.device_name}-optolink-connection-status"
         payload = {
@@ -196,6 +239,14 @@ class EnhancedMqttClient:
                 num_msgs += 1
 
         self._publish_connection_status_discovery(device)
+        num_msgs += 1
+        self._publish_status_sensor_discovery(
+            device, self.NUM_MQTT_DISCONNECTS_TOPIC, "MQTT Disconnects"
+        )
+        num_msgs += 1
+        self._publish_status_sensor_discovery(
+            device, self.NUM_OPTOLINK_ERRORS_TOPIC, "Optolink Errors"
+        )
         num_msgs += 1
 
         logger.info(
