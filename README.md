@@ -3,63 +3,65 @@
 
 # viessmann-optolink2mqtt
 
-This project provides an open source interface between a [Viessmann](https://en.wikipedia.org/wiki/Viessmann) device (heat pump, gas heater, etc) and 
-[MQTT](https://en.wikipedia.org/wiki/MQTT).
+Open-source [MQTT](https://en.wikipedia.org/wiki/MQTT) bridge for [Viessmann](https://en.wikipedia.org/wiki/Viessmann) heating systems using the Optolink interface.
+
+This project connects a [Viessmann](https://en.wikipedia.org/wiki/Viessmann) device such as a heat pump or gas boiler to a local [MQTT](https://en.wikipedia.org/wiki/MQTT) broker, allowing you to read live telemetry, control writable registers, and integrate everything into Home Assistant or any other MQTT-capable automation stack without sending data to a vendor cloud.
 
 > [!IMPORTANT]
 > This project is an independent work and is not associated with, sponsored by, or connected to the Viessmann company in any manner. Viessmann and all related trademarks, product names, and device names are trademarks or registered trademarks of Viessmann and remain the exclusive property of Viessmann.
 
+## Table of contents
 
-## What is Optolink?
+- [What is Optolink?](#what-is-optolink)
+- [Architecture](#architecture)
+- [Hardware requirements](#hardware-requirements)
+- [Features](#features)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Serial port naming](#serial-port-naming)
+- [Home Assistant integration](#home-assistant-integration)
+- [Labelling the hardware](#labelling-the-hardware)
+- [Roadmap](#roadmap)
+- [Related projects](#related-projects)
 
-Some Viessmann devices (at least those manufactured before roughly year 2014) expose an optical interface
-for communication with external devices named "_Optolink_".
+## 🧩 What is Optolink?
 
-This interface is typically located in the Vitotronic panel and officially supports a connection to the
-[VitoConnect](https://www.viessmann.co.uk/en/products/control-system-and-connectivity/vitoconnect.html)
-device.
-On the other hand such interface also allows tinkerers to read and write registers of the Viessmann devices
-to e.g. read telemetry data (temperatures, status of internal parts, etc) and write settings
-(e.g. heating mode, target temperatures, etc).
+Some Viessmann devices, especially those manufactured before roughly 2014, expose an optical interface called Optolink for communication with third-party tools.
 
-This project allows you to take control of your Viessmann device by hooking into the Optolink interface
-and sending all data to a local MQTT server, so that all your data is local and is never transiting 
-the cloud of any vendor.
+This interface is normally located in the Vitotronic panel and is officially intended for use with the VitoConnect device. But it also allows advanced users to read and write registers on the heating system to collect telemetry such as temperatures and component states, and to change settings such as heating mode or target temperatures.
 
+This project lets you connect to that interface and publish the data to a local MQTT broker, keeping the information on your own network instead of routing it through a vendor cloud.
 
-## Architecture
+## 🏗️ Architecture
 
 <img title="Setup" alt="Architecture" src="docs/architecture.png">
 
-## Hardware Required
+## 🛠️ Hardware requirements
 
-* A Single Board Computer (SBC) which is capable of running Python and has a USB-A connector
-  (if you plan to use the original Viessmann Optolink USB cable). A typical choice is the [Raspberry](https://www.raspberrypi.com/products/raspberry-pi-5/); myself I've been using the [OLinuXino A64](https://www.olimex.com/Products/OLinuXino/A64/A64-OLinuXino/) as (slightly cheaper) alternative.
-* The Optolink-to-USB cable to read/write on the Optolink interface; you have two main options: a) buy the original Viessmann cable on specialized shops such as [https://www.loebbeshop.de/](https://www.loebbeshop.de/); see exact item [here](https://www.loebbeshop.de/viessmann/ersatzteil/anschlussleitung-usb-optolink-fuer-vitoconnetc-artikel-7856059/) or b) build your own cable, more details available from other tinkerers like [MyVitotronicLogger](https://github.com/Ixtalo/MyVitotronicLogger) or at [Optolink splitter readme](https://github.com/philippoo66/optolink-splitter)
+- A small single-board computer (SBC) capable of running Python and exposing a USB-A port if you use the original Viessmann Optolink USB cable. A typical choice is a [Raspberry Pi](https://www.raspberrypi.com/products/raspberry-pi-5/); the author has also used an [OLinuXino A64](https://www.olimex.com/Products/OLinuXino/A64/A64-OLinuXino/) as a lower-cost alternative.
+- An Optolink-to-USB cable. You can either:
+  - buy the original Viessmann cable from a specialist vendor such as [Loebbe Shop](https://www.loebbeshop.de/), or
+  - build a compatible cable yourself; more details are available from projects such as [MyVitotronicLogger](https://github.com/Ixtalo/MyVitotronicLogger) and the [Optolink Splitter project](https://github.com/philippoo66/optolink-splitter).
 
+## ✨ Features
 
-## Software features
+This project is designed to be:
 
-This project main features are:
+- reliable and ready to run 24/7, with robust error handling, automatic reconnection to the MQTT broker, and serial-port recovery after transient failures
+- easy to configure through a single YAML file for all device parameters and metadata
+- capable of both reading values from the heating system and writing writable registers such as heating modes or target temperatures
+- Home Assistant friendly, with MQTT discovery support to make entities appear automatically in Home Assistant
+- straightforward to install via PyPI or Docker, with simple upgrade paths
 
-* Written to be reliable and **run 24/7**: careful exception handling, reconnects automatically to the MQTT broker in case of transient network issues, automatically re-establishes serial port connection in case of failures, etc.
-* **Easy declarative configuration**: configure all aspects of your Viessmann device from a single YAML config file (easy to backup and/or version in `git`); no need to hand-write HomeAssistant MQTT entity definitions!
-All config parameters have a clear name and associated documentation.
-* **Read and write support**: allows both to read from your Viessmann device and also to set writable registers to e.g. change heating mode, change target temperatures, etc.
-* **HomeAssistant friendly**: although this project can be used with _any_ home automation platform; it provides a number of features that make it very HomeAssistant friendly: in particular MQTT discovery messages make it possible to magically have all your Viessmann entities appear in HomeAssistant.
-* **Easy installation** via Pypi and docker and easy **upgrades**
+Current limitation:
 
-What this project does NOT have at this time:
-* Compatibility with the VitoConnect: if you are interested in that I suggest you to look at the [Optolink Splitter](https://github.com/philippoo66/optolink-splitter) or [Optolink Bridge](https://github.com/kristian/optolink-bridge/)
+- compatibility with VitoConnect is not implemented; if you need that approach, check out [Optolink Splitter](https://github.com/philippoo66/optolink-splitter) or [Optolink Bridge](https://github.com/kristian/optolink-bridge/).
 
+## 🚀 Installation
 
-## Installation
+This project supports two main setup paths: PyPI and Docker. Both are intended for Linux systems with the USB cable connected to the Optolink interface.
 
-This project supports 2 main installation methods: PyPi and Docker.
-Both methods are meant to be used from a Linux Operating system which has the USB/DIY cable attached
-(see "Hardware" section above).
-
-### Pypi package
+### PyPI package
 
 ```sh
 python3 -m venv optolink2mqtt-venv
@@ -71,8 +73,7 @@ optolink2mqtt --help
 
 ### Docker
 
-When using Docker you will need to provide the YAML config file path in the `docker run` command and 
-also provide the name of the serial port (e.g. `/dev/ttyUSB0` in the following example):
+When using Docker, provide the YAML config path and the serial port name in the command line. For example, `/dev/ttyUSB0`:
 
 ```sh
 docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
@@ -85,14 +86,11 @@ docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
 docker logs -f optolink2mqtt
 ```
 
-Please note that the `--restart=unless-stopped` makes sure that the optolink2mqtt docker will 
-be restarted after a reboot.
+The `--restart=unless-stopped` option ensures the container is restarted after a system reboot.
 
-The docker image of optolink2mqtt supports 3 main architectures: `amd64`, `armv7` and `arm64`.
+The Docker image supports three architectures: `amd64`, `armv7`, and `arm64`.
 
-For an MQTT broker that requires authentication, set `MQTT_BROKER_PASSWORD` to provide
-the password through an environment variable. To use a Docker secret instead, mount
-the secret file and set `MQTT_BROKER_PASSWORD_FILE` to its path:
+If your MQTT broker requires authentication, set `MQTT_BROKER_PASSWORD` to provide the password as an environment variable. Alternatively, mount a Docker secret file and set `MQTT_BROKER_PASSWORD_FILE` to the file path:
 
 ```sh
 docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
@@ -105,102 +103,84 @@ docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
     ghcr.io/f18m/optolink2mqtt:latest
 ```
 
-The broker username is configured in `mqtt.broker.username` in the YAML file.
-`MQTT_BROKER_PASSWORD` takes precedence over `MQTT_BROKER_PASSWORD_FILE`, and either
-environment variable overrides `mqtt.broker.password` in the YAML configuration.
-A trailing newline in the password file is ignored.
+The broker username is configured in `mqtt.broker.username` in the YAML file. `MQTT_BROKER_PASSWORD` takes precedence over `MQTT_BROKER_PASSWORD_FILE`, and either environment variable overrides `mqtt.broker.password` in the YAML configuration. A trailing newline in the password file is ignored.
 
 ### Docker Compose
 
-If you prefer Docker Compose you can grab the [docker-compose.yml](./docker-compose.yml) file and just edit the name of your serial port (e.g. replace `/dev/ttyUSB0` with the serial port you get on your device).
+If you prefer Docker Compose, use the provided [docker-compose.yml](./docker-compose.yml) file and adapt the serial port name to your system, for example replacing `/dev/ttyUSB0` with the actual port provided by your device.
 
-### Serial port naming
+## ⚙️ Configuration
 
-Something you might notice running this project on certain HW platforms is that sometimes
-due to errors on the USB bus the Linux kernel might force your Optolink-to-USB adapter
-to reinitialize and when this happens the device might change its name e.g. from `/dev/ttyUSB0` 
-to `/dev/ttyUSB1`.
-If your config file is referencing `/dev/ttyUSB0`, then optolink2mqtt will stop working.
-To prevent this, the best approach is to setup a a [udev](https://en.wikipedia.org/wiki/Udev) rule 
-that would create a symbolic link to the Optolink-to-USB device:
+This software accepts declarative configuration in YAML format. Use [optolink2mqtt.yaml](./optolink2mqtt.yaml) as the reference for the supported syntax and configuration structure.
 
-1. Use `lsusb` utility to find out all details on your Optolink-to-USB cable. Mine appears as:
+## How to discover register addresses
 
-```
+This section is still to be written.
+
+## 🔌 Serial port naming
+
+A common issue on some Linux platforms is that a USB serial adapter may be re-enumerated by the kernel after a bus reset, causing the device name to change from `/dev/ttyUSB0` to `/dev/ttyUSB1` or similar. In that case, a config file that references the old device path will stop working.
+
+The recommended solution is to create a stable [udev](https://en.wikipedia.org/wiki/Udev) symlink for the adapter and use that path instead.
+
+1. Use `lsusb` to identify the Viessmann Optolink adapter details. For example:
+
+```sh
 Bus 002 Device 006: ID 1a86:7523 QinHeng Electronics CH340 serial converter
 ```
 
-The portion after `ID` is the `vendor ID` colon `product ID`. In my case `1a86` is the `vendor ID` and `7523` is the `product ID`.
+In this example, `1a86` is the vendor ID and `7523` is the product ID.
 
-2. Create the udev rule:
+2. Create a udev rule:
 
 ```sh
 sudo nano /etc/udev/rules.d/99_optolink_usb.rules
 ```
 
-and copy-paste there a line containing a reference to the same `vendor ID` and `product ID` that appeared in the `lsusb` output:
+Then add a line like:
 
-```
+```sh
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="optolinkUSB"
 ```
 
-3. Unplug and plug again your Optolink cable
+3. Unplug and reconnect the Optolink cable.
 
-4. Use in the  [optolink2mqtt.yaml](./optolink2mqtt.yaml) config file the symlink `/dev/optolinkUSB` as
-serial port name. Also remember to use `--device=/dev/optolinkUSB` in your `docker run` command if you're using Docker.
+4. Use `/dev/optolinkUSB` in [optolink2mqtt.yaml](./optolink2mqtt.yaml) and pass `--device=/dev/optolinkUSB` in Docker commands when needed.
 
+## 🏠 Home Assistant integration
 
-## Configuration file
+This project makes it easy to expose Viessmann entities to Home Assistant through MQTT discovery.
 
-This software accepts a declarative configuration in YAML format.
-Please look at the [optolink2mqtt.yaml](./optolink2mqtt.yaml) file as reference source for the syntax.
-
-
-## How to discover register addresses
-
-TO BE WRITTEN
-
-
-## HomeAssistant Integration
-
-This project allows a very easy integration with [HomeAssistant](https://www.home-assistant.io/).
-It's enough to populae the `ha_discovery` section of each register defined in the [configuration file](./optolink2mqtt.yaml)
-with some metadata specific for each sensor, to get the sensor automatically appear inside your HomeAssistant:
+The `ha_discovery` section of each register in [optolink2mqtt.yaml](./optolink2mqtt.yaml) contains metadata that tells Home Assistant how to create entities automatically.
 
 <img title="HA integration" alt="HA integration" src="docs/home_assistant_mqtt_device.png">
 
-This makes it possible to build in your HomeAssistant dashboard visual representation of your Viessmann device.
-E.g.. for my heat pump I was able to build the following dashboard:
+This makes it possible to build a Home Assistant dashboard that reflects the state of your Viessmann system. For example, the dashboard below was created for a heat pump:
 
 <img title="HA dashboard" alt="HA dashboard" src="docs/home_assistant_dashboard2.png">
 
+## Labelling the hardware
 
-## Labelling of the HW
+Your Viessmann device and the SBC used to monitor it may stay in service for many years. To make future maintenance easier, it's a good idea to document what is running where.
 
-Most likely your Viessmann device will stay around for a lot of time (many years hopefully), 
-and so will do the SBC that connects it to your home automation platform.
-For this reason I suggest to provide some documentation for what is running on your SBC.
-A simple approach I like is to print a QR code pointing at this page and stick it physically on the SBC,
-to make it obvious to anybody inspecting it where to find the docs.
+A simple approach is to print a QR code pointing to this project and attach it physically to the SBC so that anyone inspecting it can quickly find the relevant documentation.
 
-Here you can find a QR code I produced with the optimal [miniQR code generator](https://mini-qr-code-generator.vercel.app/):
+Here's a QR code generated for that purpose:
 
 <img title="QRCode" alt="QRCode" src="docs/qr-code.png">
 
+## 🗺️ Roadmap
 
-## Roadmap
+Planned work includes:
 
-I plan to add 
+- Prometheus support for health statistics such as Optolink errors and network issues
 
-* Prometheus support to export health stats (errors on the Optolink interface, network errors, etc)
+If you are looking for a specific feature, open an [issue](https://github.com/f18m/viessmann-optolink2mqtt/issues).
 
-If you are looking for a specific feature, let me know by opening an [issue](https://github.com/f18m/viessmann-optolink2mqtt/issues).
+## 🔗 Related projects
 
-## Related projects
-
-* [Optolink Splitter](https://github.com/philippoo66/optolink-splitter): this is the original project that inspired this one
-* [Optolink Bridge](https://github.com/kristian/optolink-bridge/): inspired from the "Optolink Splitter"; requires you to own a VitoConnect device and allows you to setup a "man in the middle" device
-* [openv vcontrold](https://github.com/openv/vcontrold): seems abandoned but contains a C-based implementation of the VS1 and VS2 protocols apparently. Its [wiki](https://github.com/openv/openv/wiki/) has plenty of details although in German
-* [VitoWiFi](https://github.com/bertmelis/VitoWiFi): a C++ implementation of VS1 (KW) and VS2 (P300) Optolink protocols, for use on ESP microcontrollers but also Linux systems
-
-* [FloorHeatingController](https://github.com/f18m/floor-heating-controller): firmware for a controller of floor heating valves, to help replace physical thermostat with HomeAssistant virtual thermostats
+- [Optolink Splitter](https://github.com/philippoo66/optolink-splitter): the original project that inspired this one
+- [Optolink Bridge](https://github.com/kristian/optolink-bridge/): an approach based on the Optolink Splitter idea that requires a VitoConnect device and creates a man-in-the-middle bridge
+- [openv vcontrold](https://github.com/openv/vcontrold): an older C-based implementation of the VS1 and VS2 protocols; its wiki contains extensive protocol details in German
+- [VitoWiFi](https://github.com/bertmelis/VitoWiFi): a C++ implementation of the VS1 (KW) and VS2 (P300) Optolink protocols for Linux and ESP-based systems
+- [FloorHeatingController](https://github.com/f18m/floor-heating-controller): firmware for controlling floor-heating valves and replacing physical thermostats with Home Assistant virtual thermostats

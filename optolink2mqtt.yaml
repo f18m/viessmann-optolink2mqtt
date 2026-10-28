@@ -29,7 +29,8 @@ optolink:
   # Give up (and exit with an error) if the Optolink serial port cannot be (re)opened 
   # within this time
   reconnect_timeout_sec: 600
-  max_consecutive_failures_before_reinit: 3  # Re-initialize the VS2 protocol after this many consecutive read/write failures (e.g. after a heat pump power cycle)
+  # Re-initialize the VS2 protocol after this many consecutive read/write failures (e.g. after a heat pump power cycle)
+  max_consecutive_failures_before_reinit: 3
 
 mqtt:
   # broker: details about the MQTT broker
