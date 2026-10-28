@@ -1,4 +1,5 @@
 import os
+import socket
 import sys
 from unittest.mock import Mock
 
@@ -168,3 +169,17 @@ def test_run_handles_reinitialization_exception_through_reconnect_path(monkeypat
     app.enhanced_mqtt_client.publish_status_metrics.assert_called_once_with(3)
     assert app.optolink_interface.connect.call_count == 2
     sleep.assert_called_once_with(2)
+
+
+def test_core_loop_raises_mqtt_disconnect_for_run_to_handle():
+    app = Optolink2MqttApp()
+    app.keep_running = True
+    app.enhanced_mqtt_client = Mock()
+    app.enhanced_mqtt_client.consume_disconnect_notification.return_value = True
+
+    try:
+        app._core_loop()
+    except socket.error as error:
+        assert str(error) == "MQTT client disconnected"
+    else:
+        raise AssertionError("Expected the MQTT disconnect to reach run()")

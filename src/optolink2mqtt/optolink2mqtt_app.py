@@ -374,6 +374,9 @@ class Optolink2MqttApp:
         sleep_quantum_sec = 0.5
 
         while self.keep_running:
+            if self.enhanced_mqtt_client.consume_disconnect_notification():
+                raise socket.error("MQTT client disconnected")
+
             # execute all sampling operations waiting in the queue
             delay_for_next_register_sec = self.scheduler.run(blocking=False)
 
@@ -386,6 +389,9 @@ class Optolink2MqttApp:
             ):
                 time.sleep(sleep_quantum_sec)
                 time_waited_sec += sleep_quantum_sec
+
+                if self.enhanced_mqtt_client.consume_disconnect_notification():
+                    raise socket.error("MQTT client disconnected")
 
                 self._publish_connection_status()
 

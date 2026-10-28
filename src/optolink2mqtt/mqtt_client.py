@@ -19,8 +19,8 @@ limitations under the License.
 
 import logging
 import queue
+import threading
 import paho.mqtt.client as paho  # pip install paho-mqtt
-import time
 from typing import Any, Optional
 
 
@@ -91,6 +91,8 @@ class MqttClient:
         self._connection_id = MqttClient.CONN_ID_INVALID
         self._connection_rejected = False
         self._ha_discovery_messages_requested = False
+        self._disconnect_notification_lock = threading.Lock()
+        self._disconnect_notification_pending = False
 
         # use MQTT v3.1.1 for now
         self._mqttc = paho.Client(
@@ -99,6 +101,11 @@ class MqttClient:
             clean_session=clean_session,
             userdata=self,
             protocol=paho.MQTTv311,
+        )
+        reconnect_delay_sec = max(1, int(self.reconnect_period_sec))
+        self._mqttc.reconnect_delay_set(
+            min_delay=reconnect_delay_sec,
+            max_delay=reconnect_delay_sec,
         )
         # protocol=paho.MQTTv5
         # see http://www.steves-internet-guide.com/python-mqtt-client-changes/
@@ -223,6 +230,14 @@ class MqttClient:
             return self._connection_id
         return MqttClient.CONN_ID_INVALID
 
+    def consume_disconnect_notification(self) -> bool:
+        """Return and clear the pending notification from the MQTT network thread."""
+        with self._disconnect_notification_lock:
+            if not self._disconnect_notification_pending:
+                return False
+            self._disconnect_notification_pending = False
+            return True
+
     def get_and_reset_ha_discovery_messages_requested_flag(self) -> bool:
         """
         Returns the value of the internal flag _ha_discovery_messages_requested and resets it
@@ -344,14 +359,19 @@ class MqttClient:
         if reason_code != 0:
             if self._connection_rejected:
                 self._connection_rejected = False
-                time.sleep(self.reconnect_period_sec)
-                return
-
-            MqttClient.num_disconnects += 1
-            logging.warning(
-                f"OOOOPS! Unexpected disconnection from the MQTT broker with reason=[{reason_code}] for connection_id={self._connection_id}. Reconnecting in {self.reconnect_period_sec}sec."
-            )
-            time.sleep(self.reconnect_period_sec)
+                logging.warning(
+                    f"MQTT broker rejected connection_id={self._connection_id}; "
+                    f"retrying in {self.reconnect_period_sec} sec."
+                )
+            else:
+                MqttClient.num_disconnects += 1
+                logging.warning(
+                    f"OOOOPS! Unexpected disconnection from the MQTT broker with "
+                    f"reason=[{reason_code}] for connection_id={self._connection_id}. "
+                    f"Reconnecting in {self.reconnect_period_sec}sec."
+                )
+            with self._disconnect_notification_lock:
+                self._disconnect_notification_pending = True
         # else: reason_code==0 indicates an intentional disconnect
         return
 

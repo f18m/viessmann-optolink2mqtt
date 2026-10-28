@@ -105,6 +105,9 @@ class EnhancedMqttClient:
     def get_connection_id(self) -> int:
         return self._mqtt_client.get_connection_id()
 
+    def consume_disconnect_notification(self) -> bool:
+        return self._mqtt_client.consume_disconnect_notification()
+
     @property
     def num_subscriptions(self) -> int:
         return MqttClient.num_subscriptions
