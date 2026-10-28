@@ -31,9 +31,8 @@ import paho.mqtt.client as paho  # pip install paho-mqtt
 import serial
 
 from .config import Config
-from .mqtt_client import MqttClient
+from .enhanced_mqtt_client import EnhancedMqttClient
 from .optolink_interface import OptolinkInterface
-from .optolink_mqtt_client import OptolinkMqttClient
 from .optolinkvs2_register import OptolinkVS2Register
 
 
@@ -49,8 +48,7 @@ class Optolink2MqttApp:
         # the app is composed by 4 major components:
         self.config = None  # instance of Config
         self.message_queue = queue.Queue(Optolink2MqttApp.MAX_PENDING_MESSAGES)
-        self.mqtt_client = None  # instance of MqttClient
-        self.optolink_mqtt_client = None  # instance of OptolinkMqttClient
+        self.enhanced_mqtt_client = None  # instance of EnhancedMqttClient
         self.scheduler = None  # instance of sched.scheduler
         self.optolink_interface = None  # instance of OptolinkInterface
         self.last_logged_status = (None, None, None)
@@ -65,7 +63,7 @@ class Optolink2MqttApp:
 
         logging.info(
             f"optolink2mqtt status: "
-            f"{self.mqtt_client.get_human_friendly_stats()}"
+            f"{self.enhanced_mqtt_client.get_human_friendly_stats()}"
             f"{self.optolink_interface.get_human_friendly_stats()}"
         )
 
@@ -79,7 +77,7 @@ class Optolink2MqttApp:
             return False
 
         # publish on MQTT the "value" obtained from the raw data
-        self.mqtt_client.publish(reg.get_mqtt_state_topic(), value)
+        self.enhanced_mqtt_client.publish(reg.get_mqtt_state_topic(), value)
         return True
 
     def _sample_all_registers(self) -> None:
@@ -123,16 +121,17 @@ class Optolink2MqttApp:
         """
 
         new_status = (
-            MqttClient.num_disconnects,
+            app.enhanced_mqtt_client.get_num_disconnects(),
             app.optolink_interface.get_total_rx_frames(),
         )
         if new_status != app.last_logged_status:
             # publish status on MQTT
-            status_topic = app.mqtt_client.get_optolink2mqtt_status_topic()
-            app.mqtt_client.publish_retained(
-                status_topic + "/num_mqtt_disconnects", MqttClient.num_disconnects
+            status_topic = app.enhanced_mqtt_client.get_optolink2mqtt_status_topic()
+            app.enhanced_mqtt_client.publish_retained(
+                status_topic + "/num_mqtt_disconnects",
+                app.enhanced_mqtt_client.get_num_disconnects(),
             )
-            app.mqtt_client.publish_retained(
+            app.enhanced_mqtt_client.publish_retained(
                 status_topic + "/num_optolink_errors",
                 app.optolink_interface.get_total_errors(),
             )
@@ -171,24 +170,9 @@ class Optolink2MqttApp:
         Publishes (retained) the Optolink connection status when it changes
         or when a new MQTT connection was established.
         """
-        if not self.mqtt_client.is_connected():
-            return
-        conn_id = self.mqtt_client.get_connection_id()
-        status = (
-            MqttClient.OPTOLINK_CONNECTED_PAYLOAD
-            if self.optolink_interface.is_connected()
-            else MqttClient.OPTOLINK_DISCONNECTED_PAYLOAD
+        self.enhanced_mqtt_client.publish_optolink_connection_status(
+            self.optolink_interface.is_connected(), force
         )
-        if (
-            force
-            or status != self.last_connection_status
-            or conn_id != self.last_connection_status_conn_id
-        ):
-            self.mqtt_client.publish_retained(
-                self.mqtt_client.get_optolink_connection_status_topic(), status
-            )
-            self.last_connection_status = status
-            self.last_connection_status_conn_id = conn_id
 
     def setup(self) -> int:
         """
@@ -241,22 +225,7 @@ class Optolink2MqttApp:
             f"Optolink2MqttApp version {Optolink2MqttApp.get_embedded_version()} starting"
         )
 
-        #
-        # create MqttClient
-        #
         ha_discovery_config = self.config.config["mqtt"]["ha_discovery"]
-        ha_status_topic = OptolinkMqttClient.get_ha_status_topic(ha_discovery_config)
-        self.mqtt_client = MqttClient(
-            self.message_queue,
-            self.config.config["mqtt"]["clientid"],
-            False,  # clean_session
-            self.config.config["mqtt"]["publish_topic_prefix"],
-            self.config.config["mqtt"]["request_topic"],
-            self.config.config["mqtt"]["qos"],
-            self.config.config["mqtt"]["retain"],
-            self.config.config["mqtt"]["reconnect_period_sec"],
-            ha_status_topic,
-        )
 
         #
         # create OptolinkInterface (the serial port is opened later, in run())
@@ -313,8 +282,18 @@ class Optolink2MqttApp:
                 register_instance.get_mqtt_command_topic()
             ] = register_instance
 
-        self.optolink_mqtt_client = OptolinkMqttClient(
-            self.mqtt_client,
+        #
+        # create enhanced MQTT client
+        #
+        self.enhanced_mqtt_client = EnhancedMqttClient(
+            self.message_queue,
+            self.config.config["mqtt"]["clientid"],
+            False,  # clean_session
+            self.config.config["mqtt"]["publish_topic_prefix"],
+            self.config.config["mqtt"]["request_topic"],
+            self.config.config["mqtt"]["qos"],
+            self.config.config["mqtt"]["retain"],
+            self.config.config["mqtt"]["reconnect_period_sec"],
             ha_discovery_config,
             self.register_list_by_cmd_topic.values(),
             Optolink2MqttApp.get_embedded_version(),
@@ -324,7 +303,7 @@ class Optolink2MqttApp:
         log_period_sec = int(self.config.config["logging"]["report_status_period_sec"])
         if log_period_sec > 0:
             logging.info(
-                f"optolink2mqtt status will be published on topic {self.mqtt_client.get_optolink2mqtt_status_topic()} every {log_period_sec}sec"
+                f"optolink2mqtt status will be published on topic {self.enhanced_mqtt_client.get_optolink2mqtt_status_topic()} every {log_period_sec}sec"
             )
             self.scheduler.enter(
                 log_period_sec,
@@ -411,8 +390,8 @@ class Optolink2MqttApp:
                 self._publish_connection_status()
 
                 if (
-                    self.optolink_mqtt_client is not None
-                    and self.optolink_mqtt_client.check_if_time_to_send_discovery_messages()
+                    self.enhanced_mqtt_client is not None
+                    and self.enhanced_mqtt_client.check_if_time_to_send_discovery_messages()
                 ):
                     self._sample_all_registers()
 
@@ -431,7 +410,7 @@ class Optolink2MqttApp:
 
         # estabilish a connection to the MQTT broker
         try:
-            self.mqtt_client.connect(
+            self.enhanced_mqtt_client.connect(
                 self.config.config["mqtt"]["broker"]["host"],
                 self.config.config["mqtt"]["broker"]["port"],
                 self.config.config["mqtt"]["broker"]["username"],
@@ -449,13 +428,10 @@ class Optolink2MqttApp:
         # if a register is writable, subscribe to its 'command' topic:
         for cmd_topic, reg in self.register_list_by_cmd_topic.items():
             if reg.writable:
-                self.mqtt_client.subscribe(cmd_topic)
+                self.enhanced_mqtt_client.subscribe(cmd_topic)
         logging.info(
-            f"Executed {self.mqtt_client.num_subscriptions} MQTT subscriptions for writable registers."
+            f"Executed {self.enhanced_mqtt_client.num_subscriptions} MQTT subscriptions for writable registers."
         )
-
-        self.last_connection_status = None
-        self.last_connection_status_conn_id = MqttClient.CONN_ID_INVALID
 
         # at the start of the application we need to establish the Optolink connection
         # and that might be required later on as well in case of serial port errors
@@ -481,7 +457,7 @@ class Optolink2MqttApp:
                     self._sample_all_registers()
 
                 # restart the MQTT client secondary thread in case it was never started or failed for some reason
-                self.mqtt_client.loop_start()
+                self.enhanced_mqtt_client.loop_start()
 
                 # run till an exception is thrown:
                 self._core_loop()
@@ -506,7 +482,7 @@ class Optolink2MqttApp:
                 break
 
         # gracefully stop the event loop of MQTT client
-        self.mqtt_client.loop_stop()
+        self.enhanced_mqtt_client.loop_stop()
 
         # log status one last time
         self.log_status()
