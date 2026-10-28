@@ -18,6 +18,7 @@ limitations under the License.
 """
 
 import argparse
+import json
 import os
 import queue
 import sched
@@ -164,6 +165,56 @@ class Optolink2MqttApp:
 
         return __version__
 
+    def _publish_connection_status_discovery(
+        self, ha_discovery_topic: str, ha_device_name: str, device_dict: dict
+    ) -> int:
+        """
+        Publishes the discovery message of the binary_sensor reporting the Optolink connection status.
+        Returns the number of messages published.
+        """
+        unique_id = f"{ha_device_name}-optolink-connection-status"
+        payload = {
+            "name": "Opto Connection Status",
+            "unique_id": unique_id,
+            "device": device_dict,
+            "state_topic": self.mqtt_client.get_optolink_connection_status_topic(),
+            "payload_on": MqttClient.OPTOLINK_CONNECTED_PAYLOAD,
+            "payload_off": MqttClient.OPTOLINK_DISCONNECTED_PAYLOAD,
+            "device_class": "connectivity",
+            "entity_category": "diagnostic",
+            "availability_topic": self.mqtt_client.get_optolink2mqtt_status_topic(),
+            "payload_available": MqttClient.NEW_CONN_PAYLOAD,
+            "payload_not_available": MqttClient.LAST_WILL_PAYLOAD,
+        }
+        topic = f"{ha_discovery_topic}/binary_sensor/{ha_device_name}/{unique_id}/config"
+        logging.info(f"Publishing an MQTT discovery messages on topic '{topic}'")
+        self.mqtt_client.publish(topic, json.dumps(payload))
+        return 1
+
+    def _publish_connection_status(self, force: bool = False) -> None:
+        """
+        Publishes (retained) the Optolink connection status when it changes
+        or when a new MQTT connection was established.
+        """
+        if not self.mqtt_client.is_connected():
+            return
+        conn_id = self.mqtt_client.get_connection_id()
+        status = (
+            MqttClient.OPTOLINK_CONNECTED_PAYLOAD
+            if self.optolink_interface.is_connected()
+            else MqttClient.OPTOLINK_DISCONNECTED_PAYLOAD
+        )
+        if (
+            force
+            or status != self.last_connection_status
+            or conn_id != self.last_connection_status_conn_id
+        ):
+            self.mqtt_client.publish_retained(
+                self.mqtt_client.get_optolink_connection_status_topic(), status
+            )
+            self.last_connection_status = status
+            self.last_connection_status_conn_id = conn_id
+
     def _publish_ha_discovery_messages(self) -> int:
         """
         Publish MQTT discovery messages for HomeAssistant, from all registers that have been decorated
@@ -175,7 +226,7 @@ class Optolink2MqttApp:
         ha_device_name = self.config.config["mqtt"]["ha_discovery"]["device_name"]
         optolink2mqtt_ver = Optolink2MqttApp.get_embedded_version()
 
-        device_dict = {
+        self.device_dict = device_dict = {
             "ids": ha_device_name,
             "name": ha_device_name,
             "manufacturer": "f18m/viessmann-optolink2mqtt",
@@ -207,6 +258,10 @@ class Optolink2MqttApp:
                 )
                 self.mqtt_client.publish(topic, payload)
                 num_msgs += 1
+
+        num_msgs += self._publish_connection_status_discovery(
+            ha_discovery_topic, ha_device_name, device_dict
+        )
 
         logging.info(
             f"Published a total of {num_msgs} MQTT discovery messages under the topic prefix '{ha_discovery_topic}' for the device '{ha_device_name}'. The HomeAssistant MQTT integration should now be showing {num_msgs} entities for the device '{ha_device_name}'."
@@ -461,6 +516,8 @@ class Optolink2MqttApp:
                 time.sleep(sleep_quantum_sec)
                 time_waited_sec += sleep_quantum_sec
 
+                self._publish_connection_status()
+
                 if self.config.config["mqtt"]["ha_discovery"]["enabled"]:
                     self._check_if_time_to_send_ha_discovery_messages()
 
@@ -503,6 +560,8 @@ class Optolink2MqttApp:
         )
 
         self.last_ha_discovery_messages_connection_id = MqttClient.CONN_ID_INVALID
+        self.last_connection_status = None
+        self.last_connection_status_conn_id = MqttClient.CONN_ID_INVALID
 
         # at the start of the application we need to establish the Optolink connection
         # and that might be required later on as well in case of serial port errors
@@ -518,6 +577,7 @@ class Optolink2MqttApp:
                         return 2
 
                     new_optolink_conn_required = False
+                    self._publish_connection_status()
 
                     # immediately after a new Optolink connection is established,
                     # publish all registers to MQTT
@@ -546,6 +606,7 @@ class Optolink2MqttApp:
                 if not self.optolink_interface.handle_serial_error(e):
                     return 1
                 new_optolink_conn_required = True
+                self._publish_connection_status()
             except KeyboardInterrupt:
                 logging.warning("KeyboardInterrupt caught, exiting")
                 break
