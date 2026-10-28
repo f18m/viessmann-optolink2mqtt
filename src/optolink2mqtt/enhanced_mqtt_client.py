@@ -1,7 +1,7 @@
 """
-optolink_mqtt_client.py
+enhanced_mqtt_client.py
 ----------------
-HomeAssistant MQTT discovery support for optolink2mqtt
+MQTT client with HomeAssistant discovery support for optolink2mqtt
 Copyright (C) 2026 Francesco Montorsi
 
 Licensed under the GNU GENERAL PUBLIC LICENSE, Version 3 (the "License");
@@ -17,9 +17,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import platform
+import queue
 from collections.abc import Iterable
 from typing import Any
 
@@ -29,30 +32,112 @@ from .optolinkvs2_register import OptolinkVS2Register
 logger = logging.getLogger(__name__)
 
 
-class OptolinkMqttClient:
-    """Publishes HomeAssistant discovery messages through an MQTT client."""
+class EnhancedMqttClient:
+    """Wraps MQTT transport and HomeAssistant discovery behavior."""
 
     def __init__(
         self,
-        mqtt_client: MqttClient,
+        message_queue: queue.Queue,
+        client_id: str,
+        clean_session: bool,
+        topic_prefix: str,
+        request_topic: str,
+        qos: int,
+        retain: bool,
+        reconnect_period_sec: float,
         ha_discovery_config: dict[str, Any],
         registers: Iterable[OptolinkVS2Register],
         optolink2mqtt_version: str,
     ) -> None:
-        self.mqtt_client = mqtt_client
+        self._mqtt_client = MqttClient(
+            message_queue,
+            client_id,
+            clean_session,
+            topic_prefix,
+            request_topic,
+            qos,
+            retain,
+            reconnect_period_sec,
+            self._get_ha_status_topic(ha_discovery_config),
+        )
         self.enabled = ha_discovery_config["enabled"]
         self.discovery_topic = ha_discovery_config["topic"]
         self.device_name = ha_discovery_config["device_name"]
         self.registers = registers
         self.optolink2mqtt_version = optolink2mqtt_version
         self.last_discovery_connection_id = MqttClient.CONN_ID_INVALID
+        self._last_connection_status = None
+        self._last_connection_status_connection_id = MqttClient.CONN_ID_INVALID
 
     @staticmethod
-    def get_ha_status_topic(ha_discovery_config: dict[str, Any]) -> str:
+    def _get_ha_status_topic(ha_discovery_config: dict[str, Any]) -> str:
         """Return the HomeAssistant status topic, or an empty string when disabled."""
         if ha_discovery_config["enabled"]:
             return ha_discovery_config["topic"] + "/status"
         return ""
+
+    def connect(
+        self, mqtt_broker: str, mqtt_port: int, username: str, password: str | None
+    ) -> bool:
+        return self._mqtt_client.connect(mqtt_broker, mqtt_port, username, password)
+
+    def publish(self, topic: str, payload: str) -> None:
+        self._mqtt_client.publish(topic, payload)
+
+    def publish_retained(self, topic: str, payload: str) -> None:
+        self._mqtt_client.publish_retained(topic, payload)
+
+    def subscribe(self, topic: str) -> bool:
+        return self._mqtt_client.subscribe(topic)
+
+    def loop_start(self) -> None:
+        self._mqtt_client.loop_start()
+
+    def loop_stop(self) -> None:
+        self._mqtt_client.loop_stop()
+
+    def is_connected(self) -> bool:
+        return self._mqtt_client.is_connected()
+
+    def get_connection_id(self) -> int:
+        return self._mqtt_client.get_connection_id()
+
+    @property
+    def num_subscriptions(self) -> int:
+        return MqttClient.num_subscriptions
+
+    def get_num_disconnects(self) -> int:
+        return MqttClient.num_disconnects
+
+    def get_human_friendly_stats(self) -> str:
+        return self._mqtt_client.get_human_friendly_stats()
+
+    def get_optolink2mqtt_status_topic(self) -> str:
+        return self._mqtt_client.get_optolink2mqtt_status_topic()
+
+    def get_optolink_connection_status_topic(self) -> str:
+        return self._mqtt_client.get_optolink_connection_status_topic()
+
+    def publish_optolink_connection_status(
+        self, optolink_connected: bool, force: bool = False
+    ) -> None:
+        if not self.is_connected():
+            return
+
+        conn_id = self.get_connection_id()
+        status = (
+            MqttClient.OPTOLINK_CONNECTED_PAYLOAD
+            if optolink_connected
+            else MqttClient.OPTOLINK_DISCONNECTED_PAYLOAD
+        )
+        if (
+            force
+            or status != self._last_connection_status
+            or conn_id != self._last_connection_status_connection_id
+        ):
+            self.publish_retained(self.get_optolink_connection_status_topic(), status)
+            self._last_connection_status = status
+            self._last_connection_status_connection_id = conn_id
 
     def _publish_connection_status_discovery(self, device: dict[str, Any]) -> None:
         unique_id = f"{self.device_name}-optolink-connection-status"
@@ -60,12 +145,12 @@ class OptolinkMqttClient:
             "name": "Opto Connection Status",
             "unique_id": unique_id,
             "device": device,
-            "state_topic": self.mqtt_client.get_optolink_connection_status_topic(),
+            "state_topic": self.get_optolink_connection_status_topic(),
             "payload_on": MqttClient.OPTOLINK_CONNECTED_PAYLOAD,
             "payload_off": MqttClient.OPTOLINK_DISCONNECTED_PAYLOAD,
             "device_class": "connectivity",
             "entity_category": "diagnostic",
-            "availability_topic": self.mqtt_client.get_optolink2mqtt_status_topic(),
+            "availability_topic": self.get_optolink2mqtt_status_topic(),
             "payload_available": MqttClient.NEW_CONN_PAYLOAD,
             "payload_not_available": MqttClient.LAST_WILL_PAYLOAD,
         }
@@ -74,7 +159,7 @@ class OptolinkMqttClient:
             f"{self.device_name}/{unique_id}/config"
         )
         logger.info("Publishing an MQTT discovery messages on topic '%s'", topic)
-        self.mqtt_client.publish(topic, json.dumps(payload))
+        self.publish(topic, json.dumps(payload))
 
     def publish_discovery_messages(self) -> int:
         """Publish discovery messages for configured registers and connection status."""
@@ -107,7 +192,7 @@ class OptolinkMqttClient:
                 logger.info(
                     "Publishing an MQTT discovery messages on topic '%s'", topic
                 )
-                self.mqtt_client.publish(topic, payload)
+                self.publish(topic, payload)
                 num_msgs += 1
 
         self._publish_connection_status_discovery(device)
@@ -135,7 +220,7 @@ class OptolinkMqttClient:
             return False
 
         should_republish_registers = False
-        curr_conn_id = self.mqtt_client.get_connection_id()
+        curr_conn_id = self.get_connection_id()
         if curr_conn_id != self.last_discovery_connection_id:
             logger.warning(
                 "New connection to the MQTT broker detected (id=%s); phase 1: "
@@ -152,7 +237,7 @@ class OptolinkMqttClient:
             )
             should_republish_registers = True
 
-        if self.mqtt_client.get_and_reset_ha_discovery_messages_requested_flag():
+        if self._mqtt_client.get_and_reset_ha_discovery_messages_requested_flag():
             logger.warning(
                 "Detected notification that Home Assistant just (re)started; "
                 "phase 1: publishing MQTT discovery messages..."
