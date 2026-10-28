@@ -32,7 +32,11 @@ import serial
 
 from .config import Config
 from .enhanced_mqtt_client import EnhancedMqttClient
-from .optolink_interface import OptolinkInterface
+from .optolink_interface import (
+    OptolinkConnectionFailed,
+    OptolinkInterface,
+    OptolinkReinitializationRequired,
+)
 from .optolinkvs2_register import OptolinkVS2Register
 
 
@@ -74,6 +78,9 @@ class Optolink2MqttApp:
 
         value = self.optolink_interface.sample_register(reg)
         if value is None:
+            self.enhanced_mqtt_client.publish_status_metrics(
+                self.optolink_interface.get_total_errors()
+            )
             return False
 
         # publish on MQTT the "value" obtained from the raw data
@@ -103,8 +110,6 @@ class Optolink2MqttApp:
             f"Optolink2MqttApp.on_schedule_timer(name={reg.name}, addr=0x{reg.address:02x})",
         )
 
-        app._sample_register(reg)
-
         # reschedule next occurrence for this register
         app.scheduler.enter(
             reg.get_next_occurrence_in_seconds(),
@@ -112,6 +117,9 @@ class Optolink2MqttApp:
             Optolink2MqttApp.on_schedule_timer,
             (app, reg),
         )
+
+        # sample the register after scheduling the next occurrence
+        app._sample_register(reg)
         return
 
     @staticmethod
@@ -338,6 +346,10 @@ class Optolink2MqttApp:
                 logging.info(
                     f"Successfully wrote value [{raw_data.hex()}], obtained from MQTT payload '{payload}' to register '{reg.name}' (0x{reg.address:04x})"
                 )
+            else:
+                self.enhanced_mqtt_client.publish_status_metrics(
+                    self.optolink_interface.get_total_errors()
+                )
             # on failure keep going -- need to schedule a read later anyway
 
         # now schedule to read back the register to publish the updated value on MQTT ASAP;
@@ -366,6 +378,9 @@ class Optolink2MqttApp:
         sleep_quantum_sec = 0.5
 
         while self.keep_running:
+            if self.enhanced_mqtt_client.consume_disconnect_notification():
+                raise socket.error("MQTT client disconnected")
+
             # execute all sampling operations waiting in the queue
             delay_for_next_register_sec = self.scheduler.run(blocking=False)
 
@@ -378,6 +393,9 @@ class Optolink2MqttApp:
             ):
                 time.sleep(sleep_quantum_sec)
                 time_waited_sec += sleep_quantum_sec
+
+                if self.enhanced_mqtt_client.consume_disconnect_notification():
+                    raise socket.error("MQTT client disconnected")
 
                 self._publish_connection_status()
 
@@ -431,44 +449,62 @@ class Optolink2MqttApp:
 
         # block the main thread on the MQTT client loop
         self.keep_running = True
+        # Start MQTT processing before Optolink setup so failures during startup can
+        # publish status metrics while the interface is retrying.
+        self.enhanced_mqtt_client.loop_start()
         while self.keep_running:
             try:
                 if new_optolink_conn_required:
-                    if not self.optolink_interface.connect():
-                        logging.error("Aborting.")
-                        return 2
+                    self.optolink_interface.connect()
 
+                    # if we get here, the Optolink connection was successfully established
+                    logging.warning(
+                        "New Optolink connection established; publishing all sensor values (regardless of their schedule)..."
+                    )
                     new_optolink_conn_required = False
                     self._publish_connection_status()
 
                     # immediately after a new Optolink connection is established,
                     # publish all registers to MQTT
-                    logging.warning(
-                        "New Optolink connection established; publishing all sensor values (regardless of their schedule)..."
-                    )
                     self._sample_all_registers()
-
-                # restart the MQTT client secondary thread in case it was never started or failed for some reason
-                self.enhanced_mqtt_client.loop_start()
 
                 # run till an exception is thrown:
                 self._core_loop()
 
-            # try to recover from exceptions:
+            # try to recover from NETWORK exceptions:
             except socket.error as e:
                 reconn_period_sec = self.config.config["mqtt"]["reconnect_period_sec"]
                 logging.error(
                     f"socket/network error caught: {e}, sleeping for {reconn_period_sec} sec..."
                 )
                 time.sleep(reconn_period_sec)
-            except (termios.error, serial.SerialException) as e:
+
+            # try to recover from SERIAL/OPTOLINK exceptions:
+            except (
+                OptolinkConnectionFailed,
+                OptolinkReinitializationRequired,
+                termios.error,
+                serial.SerialException,
+            ) as e:
                 # termios is used by the pyserial POSIX implementation
                 # sometimes it throws errors when the serial port is disconnected
                 # so catch them here and trigger a new serial-port reinitialization
-                if not self.optolink_interface.handle_serial_error(e):
-                    return 1
+                self.enhanced_mqtt_client.publish_status_metrics(
+                    self.optolink_interface.get_total_errors()
+                )
+                reconnect_delay_sec = self.optolink_interface.handle_serial_error(e)
+                if reconnect_delay_sec is None:
+                    # exceeded max time for reconnecting... exit the application
+                    return 2 if isinstance(e, OptolinkConnectionFailed) else 1
+
+                time.sleep(reconnect_delay_sec)
+
+                # ask for a new optolink connection on the next loop iteration
                 new_optolink_conn_required = True
+
+                # update the connection status on MQTT to reflect the failed Optolink connection
                 self._publish_connection_status()
+
             except KeyboardInterrupt:
                 logging.warning("KeyboardInterrupt caught, exiting")
                 break
