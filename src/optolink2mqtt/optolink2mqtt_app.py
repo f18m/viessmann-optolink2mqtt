@@ -18,23 +18,23 @@ limitations under the License.
 """
 
 import argparse
-import json
+import logging
 import os
 import queue
 import sched
 import socket
-import logging
 import sys
-import platform
 import termios
 import time
-import serial
+
 import paho.mqtt.client as paho  # pip install paho-mqtt
+import serial
 
 from .config import Config
 from .mqtt_client import MqttClient
-from .optolinkvs2_register import OptolinkVS2Register
 from .optolink_interface import OptolinkInterface
+from .optolink_mqtt_client import OptolinkMqttClient
+from .optolinkvs2_register import OptolinkVS2Register
 
 
 class Optolink2MqttApp:
@@ -50,6 +50,7 @@ class Optolink2MqttApp:
         self.config = None  # instance of Config
         self.message_queue = queue.Queue(Optolink2MqttApp.MAX_PENDING_MESSAGES)
         self.mqtt_client = None  # instance of MqttClient
+        self.optolink_mqtt_client = None  # instance of OptolinkMqttClient
         self.scheduler = None  # instance of sched.scheduler
         self.optolink_interface = None  # instance of OptolinkInterface
         self.last_logged_status = (None, None, None)
@@ -165,32 +166,6 @@ class Optolink2MqttApp:
 
         return __version__
 
-    def _publish_connection_status_discovery(
-        self, ha_discovery_topic: str, ha_device_name: str, device_dict: dict
-    ) -> int:
-        """
-        Publishes the discovery message of the binary_sensor reporting the Optolink connection status.
-        Returns the number of messages published.
-        """
-        unique_id = f"{ha_device_name}-optolink-connection-status"
-        payload = {
-            "name": "Opto Connection Status",
-            "unique_id": unique_id,
-            "device": device_dict,
-            "state_topic": self.mqtt_client.get_optolink_connection_status_topic(),
-            "payload_on": MqttClient.OPTOLINK_CONNECTED_PAYLOAD,
-            "payload_off": MqttClient.OPTOLINK_DISCONNECTED_PAYLOAD,
-            "device_class": "connectivity",
-            "entity_category": "diagnostic",
-            "availability_topic": self.mqtt_client.get_optolink2mqtt_status_topic(),
-            "payload_available": MqttClient.NEW_CONN_PAYLOAD,
-            "payload_not_available": MqttClient.LAST_WILL_PAYLOAD,
-        }
-        topic = f"{ha_discovery_topic}/binary_sensor/{ha_device_name}/{unique_id}/config"
-        logging.info(f"Publishing an MQTT discovery messages on topic '{topic}'")
-        self.mqtt_client.publish(topic, json.dumps(payload))
-        return 1
-
     def _publish_connection_status(self, force: bool = False) -> None:
         """
         Publishes (retained) the Optolink connection status when it changes
@@ -214,59 +189,6 @@ class Optolink2MqttApp:
             )
             self.last_connection_status = status
             self.last_connection_status_conn_id = conn_id
-
-    def _publish_ha_discovery_messages(self) -> int:
-        """
-        Publish MQTT discovery messages for HomeAssistant, from all registers that have been decorated
-        with the "ha_discovery" metadata.
-        Returns the number of MQTT discovery messages published.
-        """
-
-        ha_discovery_topic = self.config.config["mqtt"]["ha_discovery"]["topic"]
-        ha_device_name = self.config.config["mqtt"]["ha_discovery"]["device_name"]
-        optolink2mqtt_ver = Optolink2MqttApp.get_embedded_version()
-
-        self.device_dict = device_dict = {
-            "ids": ha_device_name,
-            "name": ha_device_name,
-            "manufacturer": "f18m/viessmann-optolink2mqtt",
-            # FIXME: maybe we should ask in the config file for the Viessmann device model instead of
-            #        using the Linux OS platform for this sw?
-            "sw_version": platform.system(),  # the OS name like 'Linux', 'Darwin', 'Java', 'Windows'
-            "hw_version": platform.machine(),  # this is actually something like "x86_64"
-            "model": platform.platform(
-                terse=True
-            ),  # on Linux this is a condensed summary of "uname -a"
-            "configuration_url": "https://github.com/f18m/viessmann-optolink2mqtt",
-            # "connections": [["mac", get_mac_address()]],
-        }
-        num_msgs = 0
-        for reg in self.register_list_by_cmd_topic.values():
-            # expire the sensor in HomeAssistant after a duration equal to 1.5 the usual interval;
-            # also apply a lower bound of 10sec; this is a reasonable way to avoid that a single MQTT
-            # message not delivered turns the entity into "not available" inside HomeAssistant;
-            # on the other hand, if optolink2mqtt goes down or the MQTT broker goes down, the entity at some
-            # point will be unavailable so the user will know that something is wrong.
-            expire_time_sec = max(10, reg.sampling_period_sec * 1.5)
-            payload = reg.get_ha_discovery_payload(
-                ha_device_name, optolink2mqtt_ver, device_dict, expire_time_sec
-            )
-            if payload is not None:
-                topic = reg.get_ha_discovery_topic(ha_discovery_topic, ha_device_name)
-                logging.info(
-                    f"Publishing an MQTT discovery messages on topic '{topic}'"
-                )
-                self.mqtt_client.publish(topic, payload)
-                num_msgs += 1
-
-        num_msgs += self._publish_connection_status_discovery(
-            ha_discovery_topic, ha_device_name, device_dict
-        )
-
-        logging.info(
-            f"Published a total of {num_msgs} MQTT discovery messages under the topic prefix '{ha_discovery_topic}' for the device '{ha_device_name}'. The HomeAssistant MQTT integration should now be showing {num_msgs} entities for the device '{ha_device_name}'."
-        )
-        return num_msgs
 
     def setup(self) -> int:
         """
@@ -322,11 +244,8 @@ class Optolink2MqttApp:
         #
         # create MqttClient
         #
-        ha_status_topic = ""
-        if self.config.config["mqtt"]["ha_discovery"]["enabled"]:
-            ha_status_topic = (
-                self.config.config["mqtt"]["ha_discovery"]["topic"] + "/status"
-            )
+        ha_discovery_config = self.config.config["mqtt"]["ha_discovery"]
+        ha_status_topic = OptolinkMqttClient.get_ha_status_topic(ha_discovery_config)
         self.mqtt_client = MqttClient(
             self.message_queue,
             self.config.config["mqtt"]["clientid"],
@@ -394,6 +313,13 @@ class Optolink2MqttApp:
                 register_instance.get_mqtt_command_topic()
             ] = register_instance
 
+        self.optolink_mqtt_client = OptolinkMqttClient(
+            self.mqtt_client,
+            ha_discovery_config,
+            self.register_list_by_cmd_topic.values(),
+            Optolink2MqttApp.get_embedded_version(),
+        )
+
         # add periodic log to schedule
         log_period_sec = int(self.config.config["logging"]["report_status_period_sec"])
         if log_period_sec > 0:
@@ -410,40 +336,6 @@ class Optolink2MqttApp:
 
         # success
         return 0
-
-    def _check_if_time_to_send_ha_discovery_messages(self) -> None:
-        """
-        Checks whether HomeAssistant has (re)started and MQTT discovery messages
-        must be sent again.
-        """
-        curr_conn_id = self.mqtt_client.get_connection_id()
-        if curr_conn_id != self.last_ha_discovery_messages_connection_id:
-            # looks like a new MQTT connection to the broker has (recently) been estabilished;
-            # send out MQTT discovery messages
-            logging.warning(
-                f"New connection to the MQTT broker detected (id={curr_conn_id}); phase 1: sending out MQTT discovery messages..."
-            )
-            self._publish_ha_discovery_messages()
-            self.last_ha_discovery_messages_connection_id = curr_conn_id
-
-            # to be on the safe side, immediately after sending out the discovery messages,
-            # sample all registers and publish their values on MQTT
-            logging.warning(
-                f"New connection to the MQTT broker detected (id={curr_conn_id}); phase 2: sending out all sensor values (regardless of their schedule)..."
-            )
-            self._sample_all_registers()
-
-        if self.mqtt_client.get_and_reset_ha_discovery_messages_requested_flag():
-            # MQTT discovery messages have been requested...
-            logging.warning(
-                "Detected notification that Home Assistant just (re)started; phase 1: publishing MQTT discovery messages..."
-            )
-            self._publish_ha_discovery_messages()
-
-            logging.warning(
-                "Detected notification that Home Assistant just (re)started; phase 2: publishing all sensor values (regardless of their schedule)..."
-            )
-            self._sample_all_registers()
 
     def _process_received_mqtt_message(self, msg: paho.MQTTMessage) -> None:
         """
@@ -518,8 +410,11 @@ class Optolink2MqttApp:
 
                 self._publish_connection_status()
 
-                if self.config.config["mqtt"]["ha_discovery"]["enabled"]:
-                    self._check_if_time_to_send_ha_discovery_messages()
+                if (
+                    self.optolink_mqtt_client is not None
+                    and self.optolink_mqtt_client.check_if_time_to_send_discovery_messages()
+                ):
+                    self._sample_all_registers()
 
                 try:
                     msg = self.message_queue.get_nowait()
@@ -559,7 +454,6 @@ class Optolink2MqttApp:
             f"Executed {self.mqtt_client.num_subscriptions} MQTT subscriptions for writable registers."
         )
 
-        self.last_ha_discovery_messages_connection_id = MqttClient.CONN_ID_INVALID
         self.last_connection_status = None
         self.last_connection_status_conn_id = MqttClient.CONN_ID_INVALID
 
