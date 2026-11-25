@@ -87,6 +87,9 @@ class MqttClient:
         self.reconnect_period_sec = reconnect_period_sec
         self.ha_status_topic = ha_status_topic
 
+        # topics to (re)subscribe at every successful connection to the broker
+        self._extra_topics: list[str] = []
+
         # internal flags:
         self._connection_id = MqttClient.CONN_ID_INVALID
         self._connection_rejected = False
@@ -187,6 +190,8 @@ class MqttClient:
         """
         Subscribe to a topic on the MQTT broker
         """
+        if topic not in self._extra_topics:
+            self._extra_topics.append(topic)
         logging.info("Subscribing to MQTT topic [%s]", topic)
         ret = self._mqttc.subscribe(topic, self.qos)
         if ret[0] != paho.MQTT_ERR_SUCCESS:
@@ -342,6 +347,12 @@ class MqttClient:
             )
             mqttc.subscribe(self.ha_status_topic, self.qos)
         # else: Home Assistant MQTT discovery messages are disabled
+
+        # (re)subscribe to the topics requested via subscribe(), which might have been
+        # called when the connection was not yet established (and thus silently lost)
+        for topic in self._extra_topics:
+            logging.info(f"Subscribing to MQTT topic [{topic}]")
+            mqttc.subscribe(topic, self.qos)
 
         return
 
