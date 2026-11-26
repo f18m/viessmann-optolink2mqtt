@@ -29,8 +29,6 @@ from typing import Any
 from .mqtt_client import MqttClient
 from .optolinkvs2_register import OptolinkVS2Register
 
-logger = logging.getLogger(__name__)
-
 
 class EnhancedMqttClient:
     """Wraps MQTT transport and HomeAssistant discovery behavior."""
@@ -199,7 +197,7 @@ class EnhancedMqttClient:
         topic = (
             f"{self.discovery_topic}/sensor/" f"{self.device_name}/{unique_id}/config"
         )
-        logger.info("Publishing an MQTT discovery message on topic '%s'", topic)
+        logging.info("Publishing an MQTT discovery message on topic '%s'", topic)
         self.publish(topic, json.dumps(payload))
 
     def _publish_connection_status_discovery(self, device: dict[str, Any]) -> None:
@@ -221,7 +219,7 @@ class EnhancedMqttClient:
             f"{self.discovery_topic}/binary_sensor/"
             f"{self.device_name}/{unique_id}/config"
         )
-        logger.info("Publishing an MQTT discovery messages on topic '%s'", topic)
+        logging.info("Publishing an MQTT discovery messages on topic '%s'", topic)
         self.publish(topic, json.dumps(payload))
 
     def publish_discovery_messages(self) -> int:
@@ -252,7 +250,7 @@ class EnhancedMqttClient:
                 topic = reg.get_ha_discovery_topic(
                     self.discovery_topic, self.device_name
                 )
-                logger.info(
+                logging.info(
                     "Publishing an MQTT discovery messages on topic '%s'", topic
                 )
                 self.publish(topic, payload)
@@ -269,7 +267,7 @@ class EnhancedMqttClient:
         )
         num_msgs += 1
 
-        logger.info(
+        logging.info(
             "Published a total of %s MQTT discovery messages under the topic "
             "prefix '%s' for the device '%s'. The HomeAssistant MQTT integration "
             "should now be showing %s entities for the device '%s'.",
@@ -293,7 +291,7 @@ class EnhancedMqttClient:
         should_republish_registers = False
         curr_conn_id = self.get_connection_id()
         if curr_conn_id != self.last_discovery_connection_id:
-            logger.warning(
+            logging.warning(
                 "New connection to the MQTT broker detected (id=%s); phase 1: "
                 "sending out MQTT discovery messages...",
                 curr_conn_id,
@@ -301,7 +299,7 @@ class EnhancedMqttClient:
             self.publish_discovery_messages()
             self.last_discovery_connection_id = curr_conn_id
 
-            logger.warning(
+            logging.warning(
                 "New connection to the MQTT broker detected (id=%s); phase 2: "
                 "sending out all sensor values (regardless of their schedule)...",
                 curr_conn_id,
@@ -309,13 +307,13 @@ class EnhancedMqttClient:
             should_republish_registers = True
 
         if self._mqtt_client.get_and_reset_ha_discovery_messages_requested_flag():
-            logger.warning(
+            logging.warning(
                 "Detected notification that Home Assistant just (re)started; "
                 "phase 1: publishing MQTT discovery messages..."
             )
             self.publish_discovery_messages()
 
-            logger.warning(
+            logging.warning(
                 "Detected notification that Home Assistant just (re)started; "
                 "phase 2: publishing all sensor values (regardless of their "
                 "schedule)..."
