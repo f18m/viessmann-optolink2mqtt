@@ -325,7 +325,13 @@ class Optolink2MqttApp:
         """
 
         topic = msg.topic
-        payload = msg.payload.decode("utf-8")
+        try:
+            payload = msg.payload.decode("utf-8")
+        except UnicodeDecodeError:
+            logging.error(
+                f"Ignoring MQTT message on topic '{topic}': payload is not valid UTF-8"
+            )
+            return
 
         if topic not in self.register_list_by_cmd_topic:
             logging.error(f"Received message from unknown topic: {topic}")

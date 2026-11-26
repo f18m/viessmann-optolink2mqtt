@@ -185,20 +185,29 @@ class OptolinkVS2Register:
                 return None
             val = reverse_enum[str_value]
         else:
-            # normal numeric value
-            if self.scale_factor != 1.0:
-                val = int(
-                    round(
-                        float(str_value) / self.scale_factor,
-                        OptolinkVS2Register.MAX_DECIMALS,
+            # normal numeric value; the payload comes from MQTT and cannot be trusted:
+            # float() accepts "nan" and "inf", which cannot be converted to int
+            try:
+                if self.scale_factor != 1.0:
+                    val = int(
+                        round(
+                            float(str_value) / self.scale_factor,
+                            OptolinkVS2Register.MAX_DECIMALS,
+                        )
                     )
+                else:
+                    val = int(str_value)
+            except (ValueError, OverflowError):
+                logging.error(
+                    f"Invalid value '{str_value}' for register '{self.name}': not a valid finite number"
                 )
-            else:
-                val = int(str_value)
-        rawdata = val.to_bytes(self.length, byteorder="little", signed=self.signed)
-        if len(rawdata) != self.length:
+                return None
+        try:
+            rawdata = val.to_bytes(self.length, byteorder="little", signed=self.signed)
+        except OverflowError:
             logging.error(
-                f"Value '{str_value}' for register '{self.name}' cannot be represented in {self.length} bytes."
+                f"Value '{str_value}' for register '{self.name}' cannot be represented in {self.length} "
+                f"{'signed' if self.signed else 'unsigned'} bytes."
             )
             return None
 
