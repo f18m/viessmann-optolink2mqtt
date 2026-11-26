@@ -144,8 +144,9 @@ registers_poll_list:
       7: "Cooling only"
     ha_discovery:
       name: "Heating Circuit 1 Mode"
-      platform: sensor
-      device_class: enum
+      # writable registers must use a platform that accepts commands from HomeAssistant:
+      # "select" for enumerated values, "number" for numeric values, "switch" for on/off values
+      platform: select
       entity_category: config
   
   # another register example, showing a writable target temperature:
