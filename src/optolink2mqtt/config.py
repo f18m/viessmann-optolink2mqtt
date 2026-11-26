@@ -250,8 +250,7 @@ class Config:
         self.config["mqtt"]["broker"]["password"] = password
 
     def _fill_defaults_register(self, reg: dict) -> dict:
-        if "sampling_period_sec" not in reg:
-            reg["sampling_period_sec"] = 1
+        # NOTE: "sampling_period_seconds" is mandatory in the schema, so it has no default
         if "signed" not in reg:
             reg["signed"] = False
         if "writable" not in reg:
