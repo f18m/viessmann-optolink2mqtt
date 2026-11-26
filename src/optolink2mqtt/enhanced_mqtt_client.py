@@ -113,6 +113,9 @@ class EnhancedMqttClient:
     def loop_stop(self) -> None:
         self._mqtt_client.loop_stop()
 
+    def disconnect(self) -> None:
+        self._mqtt_client.disconnect()
+
     def is_connected(self) -> bool:
         return self._mqtt_client.is_connected()
 

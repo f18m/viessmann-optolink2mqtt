@@ -233,6 +233,29 @@ class MqttClient:
             f"stopped MQTT client loop for connection_id={self._connection_id}; return code was {rc}"
         )
 
+    def disconnect(self, timeout_sec: float = 2.0) -> None:
+        """
+        Cleanly disconnects from the MQTT broker.
+        A clean disconnection does not trigger the last-will message, so the "offline"
+        status is published explicitly first (retained, like the last-will), waiting up
+        to timeout_sec for it to be sent. The paho loop must still be running.
+        """
+        if self._mqttc.is_connected():
+            info = self._mqttc.publish(
+                self.get_optolink2mqtt_status_topic(),
+                MqttClient.LAST_WILL_PAYLOAD,
+                qos=self.qos,
+                retain=True,
+            )
+            try:
+                info.wait_for_publish(timeout=timeout_sec)
+            except (RuntimeError, ValueError) as e:
+                logging.warning(f"Cannot publish the MQTT offline status: {e}")
+        rc = self._mqttc.disconnect()
+        logging.info(
+            f"disconnected from MQTT broker for connection_id={self._connection_id}; return code was {rc}"
+        )
+
     def is_connected(self) -> bool:
         """
         Returns true if currently connected to the MQTT broker

@@ -157,8 +157,8 @@ def test_run_handles_reinitialization_exception_through_reconnect_path(monkeypat
     app._publish_connection_status = Mock()
     app.log_status = Mock()
     app.optolink_interface.handle_serial_error.return_value = 2
-    sleep = Mock()
-    monkeypatch.setattr("optolink2mqtt.optolink2mqtt_app.time.sleep", sleep)
+    sleep = Mock(return_value=False)
+    app._wait = sleep
     core_loop_calls = [0]
 
     def core_loop():
@@ -212,8 +212,8 @@ def test_run_handles_failed_connect_through_shared_optolink_handler(monkeypatch)
     app._sample_all_registers = Mock()
     app._publish_connection_status = Mock()
     app.log_status = Mock()
-    sleep = Mock()
-    monkeypatch.setattr("optolink2mqtt.optolink2mqtt_app.time.sleep", sleep)
+    sleep = Mock(return_value=False)
+    app._wait = sleep
 
     def core_loop():
         app.keep_running = False
