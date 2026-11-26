@@ -50,6 +50,9 @@ class MqttClient:
     # Counter of total messages received from subscribed topics
     num_received_messages = 0
 
+    # Counter of received messages dropped because the message queue was full
+    num_dropped_messages = 0
+
     # Constant value indicating the absence of a connection to the broker from get_connection_id()
     CONN_ID_INVALID = 0
 
@@ -279,6 +282,7 @@ class MqttClient:
             f"{MqttClient.num_disconnects} MQTT disconnections; "
             f"{success_perc:0.1f}% of {MqttClient.num_published_total} successful MQTT published msgs; "
             f"{MqttClient.num_received_messages} MQTT messages received; "
+            f"{MqttClient.num_dropped_messages} MQTT messages dropped; "
         )
         return status
 
@@ -413,9 +417,18 @@ class MqttClient:
                 # this is typically not a good news, unless it's a planned maintainance
                 logging.info("!!! HomeAssistant status changed to 'offline' !!!")
         else:
-            # push the message to the thread-safe queue that was provided at construction time
+            # push the message to the thread-safe queue that was provided at construction time;
+            # never block here: this runs in the paho network thread, which must keep servicing
+            # the connection (e.g. keepalives) while the main thread is busy
             MqttClient.num_received_messages += 1
-            self.message_queue.put(msg)
+            try:
+                self.message_queue.put_nowait(msg)
+            except queue.Full:
+                MqttClient.num_dropped_messages += 1
+                logging.warning(
+                    f"Dropping MQTT message on topic [{msg.topic}]: queue of pending messages is full "
+                    f"({MqttClient.num_dropped_messages} dropped so far)"
+                )
         return
 
     def on_publish(
