@@ -60,10 +60,6 @@ class Optolink2MqttApp:
         # dict of OptolinkVS2Register instances keyed by their COMMAND TOPIC
         self.register_list_by_cmd_topic = {}
 
-        # dict of the next periodic sampling event (sched.Event) keyed by OptolinkVS2Register;
-        # ensures there is a single periodic sampling chain per register
-        self.next_sampling_event_by_register = {}
-
     def log_status(self) -> None:
         """
         Logs summary of how well this app is running.
@@ -114,18 +110,8 @@ class Optolink2MqttApp:
             f"Optolink2MqttApp.on_schedule_timer(name={reg.name}, addr=0x{reg.address:02x})",
         )
 
-        # this callback may run outside the periodic schedule (e.g. to read back a register
-        # just written over MQTT): cancel the pending periodic occurrence, if any, so that
-        # each register keeps a single periodic sampling chain
-        pending_event = app.next_sampling_event_by_register.get(reg)
-        if pending_event is not None:
-            try:
-                app.scheduler.cancel(pending_event)
-            except ValueError:
-                pass  # the pending event is the one currently running
-
         # reschedule next occurrence for this register
-        app.next_sampling_event_by_register[reg] = app.scheduler.enter(
+        app.scheduler.enter(
             reg.get_next_occurrence_in_seconds(),
             Optolink2MqttApp.NORMAL_SCHEDULER_PRIORITY,
             Optolink2MqttApp.on_schedule_timer,
@@ -282,13 +268,11 @@ class Optolink2MqttApp:
             first_time_delay_sec = i + 0.1
 
             # include this in our scheduler:
-            self.next_sampling_event_by_register[register_instance] = (
-                self.scheduler.enter(
-                    first_time_delay_sec,
-                    Optolink2MqttApp.NORMAL_SCHEDULER_PRIORITY,
-                    Optolink2MqttApp.on_schedule_timer,
-                    (self, register_instance),
-                )
+            self.scheduler.enter(
+                first_time_delay_sec,
+                Optolink2MqttApp.NORMAL_SCHEDULER_PRIORITY,
+                Optolink2MqttApp.on_schedule_timer,
+                (self, register_instance),
             )
             i += 1
 

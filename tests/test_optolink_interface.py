@@ -195,7 +195,9 @@ def test_run_handles_failed_connect_through_shared_optolink_handler(monkeypatch)
         connect_attempts[0] += 1
         if connect_attempts[0] == 1:
             app.enhanced_mqtt_client.loop_start.assert_called_once()
-            raise OptolinkConnectionFailed("Cannot initialize Optolink VS2 protocol")
+            raise OptolinkConnectionFailed(
+                "Cannot initialize Optolink VS2 protocol"
+            )
         return True
 
     app.optolink_interface.connect.side_effect = connect
