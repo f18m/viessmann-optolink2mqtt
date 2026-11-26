@@ -13,7 +13,6 @@ def test_rejected_connection_does_not_publish_or_subscribe(caplog, monkeypatch):
 
     from optolink2mqtt.mqtt_client import MqttClient
 
-    disconnect_count = MqttClient.num_disconnects
     transport = Mock()
     monkeypatch.setattr(
         "optolink2mqtt.mqtt_client.paho.Client",
@@ -58,7 +57,7 @@ def test_rejected_connection_does_not_publish_or_subscribe(caplog, monkeypatch):
     )
 
     assert "OOOOPS!" not in caplog.text
-    assert MqttClient.num_disconnects == disconnect_count
+    assert client.num_disconnects == 0
     assert client.consume_disconnect_notification() is True
     assert client.consume_disconnect_notification() is False
     transport.publish.assert_not_called()

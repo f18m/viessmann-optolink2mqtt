@@ -127,10 +127,10 @@ class EnhancedMqttClient:
 
     @property
     def num_subscriptions(self) -> int:
-        return MqttClient.num_subscriptions
+        return self._mqtt_client.num_subscriptions
 
     def get_num_disconnects(self) -> int:
-        return MqttClient.num_disconnects
+        return self._mqtt_client.num_disconnects
 
     def get_human_friendly_stats(self) -> str:
         return self._mqtt_client.get_human_friendly_stats()

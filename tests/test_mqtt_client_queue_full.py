@@ -23,7 +23,6 @@ def make_client(monkeypatch, maxsize):
     monkeypatch.setattr(
         "optolink2mqtt.mqtt_client.paho.Client", Mock(return_value=Mock())
     )
-    monkeypatch.setattr(MqttClient, "num_dropped_messages", 0)
     message_queue = queue.Queue(maxsize)
     client = MqttClient(
         message_queue, "test", False, "optolink2mqtt/test/", "", 0, False, 5, ""
@@ -46,7 +45,7 @@ def test_on_message_does_not_block_when_queue_is_full(monkeypatch):
     assert not t.is_alive(), "on_message() blocked on a full queue"
     assert message_queue.get_nowait() is first
     assert message_queue.empty()
-    assert MqttClient.num_dropped_messages == 1
+    assert client.num_dropped_messages == 1
     assert "1 MQTT messages dropped" in client.get_human_friendly_stats()
 
 
@@ -58,4 +57,4 @@ def test_on_message_queues_when_there_is_room(monkeypatch):
         client.on_message(None, None, m)
 
     assert [message_queue.get_nowait() for _ in msgs] == msgs
-    assert MqttClient.num_dropped_messages == 0
+    assert client.num_dropped_messages == 0

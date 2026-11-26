@@ -142,7 +142,7 @@ def test_status_metrics_publish_on_client_owned_topics(monkeypatch):
         {"enabled": False, "topic": "homeassistant", "device_name": "device"},
         [],
     )
-    monkeypatch.setattr("optolink2mqtt.mqtt_client.MqttClient.num_disconnects", 3)
+    client._mqtt_client.num_disconnects = 3
 
     client.publish_status_metrics(7)
 

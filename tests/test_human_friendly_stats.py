@@ -32,8 +32,6 @@ def test_mqtt_stats_before_any_publish(monkeypatch):
     monkeypatch.setattr(
         "optolink2mqtt.mqtt_client.paho.Client", Mock(return_value=Mock())
     )
-    monkeypatch.setattr(MqttClient, "num_published_total", 0)
-    monkeypatch.setattr(MqttClient, "num_published_successful", 0)
     client = MqttClient(
         queue.Queue(), "test-client", False, "prefix/", "", 0, False, 5, ""
     )
