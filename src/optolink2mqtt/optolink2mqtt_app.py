@@ -250,7 +250,9 @@ class Optolink2MqttApp:
             logging.error("No registers to read and poll, exiting")
             return 3
 
-        self.scheduler = sched.scheduler(time.time, time.sleep)
+        # NOTE: use a monotonic clock: the wall clock can jump (e.g. NTP sync on a
+        # Single Board Computer without RTC), which would stall or burst the polling
+        self.scheduler = sched.scheduler(time.monotonic, time.sleep)
         i = 0
         for reg in register_list:
             try:
