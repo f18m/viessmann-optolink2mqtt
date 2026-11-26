@@ -284,4 +284,4 @@ class TestOptolinkVS2RegisterEdgeCases:
         reg = OptolinkVS2Register(reg_data, "home/device")
 
         # Special characters should be preserved or handled correctly
-        assert reg.sanitized_name == "flow_c__return_temp"
+        assert reg.sanitized_name == "flow_c_return_temp"

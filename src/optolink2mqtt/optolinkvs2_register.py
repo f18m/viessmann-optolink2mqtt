@@ -23,6 +23,7 @@ from typing import Dict, Any
 # import hashlib
 import json
 import logging
+import re
 
 
 class OptolinkVS2Register:
@@ -37,6 +38,11 @@ class OptolinkVS2Register:
     """
 
     MAX_DECIMALS = 2
+
+    # characters removed from register names by _sanitize_name()
+    _DROPPED_CHARS = re.compile(r"[()\[\]{}\"']")
+    # runs of characters replaced by a single underscore by _sanitize_name()
+    _SEPARATOR_CHARS = re.compile(r"[^a-z0-9]+")
 
     def __init__(
         self,
@@ -70,31 +76,20 @@ class OptolinkVS2Register:
     def _sanitize_name(self, name: str) -> str:
         """
         Returns a sanitized version of the given name, suitable to be used as MQTT topic part
-        or HomeAssistant unique ID part.
+        or HomeAssistant unique ID part: only lowercase ASCII letters, digits and single
+        underscores, never at the start or end.
+        Brackets, quotes and non-ASCII characters are dropped; any other run of characters
+        (spaces, punctuation, MQTT wildcards '+' and '#', ...) becomes a single underscore.
+        Raises ValueError if nothing is left.
         """
         sanitized = name.lower()
-        sanitized = sanitized.replace(" ", "_")
-        sanitized = sanitized.replace("-", "_")
-        sanitized = sanitized.replace("/", "_")
-        sanitized = sanitized.replace("\\", "_")
-        sanitized = sanitized.replace(".", "_")
-        sanitized = sanitized.replace(",", "_")
-        sanitized = sanitized.replace(";", "_")
-        sanitized = sanitized.replace(":", "_")
-        sanitized = sanitized.replace("(", "")
-        sanitized = sanitized.replace(")", "")
-        sanitized = sanitized.replace("[", "")
-        sanitized = sanitized.replace("]", "")
-        sanitized = sanitized.replace("{", "")
-        sanitized = sanitized.replace("}", "")
-        sanitized = sanitized.replace('"', "")
-        sanitized = sanitized.replace("'", "")
-
-        sanitized = sanitized.replace("__", "_")
-        sanitized = sanitized.strip("_")
-
-        # ensure only ASCII characters are present
+        sanitized = OptolinkVS2Register._DROPPED_CHARS.sub("", sanitized)
         sanitized = sanitized.encode("ascii", errors="ignore").decode("ascii")
+        sanitized = OptolinkVS2Register._SEPARATOR_CHARS.sub("_", sanitized).strip("_")
+        if not sanitized:
+            raise ValueError(
+                f"Register name '{name}' contains no letters or digits usable in an MQTT topic"
+            )
         return sanitized
 
     def _parse_byte_filter(self, byte_filter: str | None) -> slice | None:
