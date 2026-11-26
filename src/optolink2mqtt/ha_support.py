@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-HA_SUPPORTED_PLATFORMS = ["sensor", "binary_sensor", "select", "switch", "number"]
+HA_SUPPORTED_PLATFORMS = ["sensor", "binary_sensor", "select", "switch", "number", "text"]
 HA_SUPPORTED_DEVICE_CLASSES = {
     # see https://www.home-assistant.io/integrations/binary_sensor/#device-class
     "binary_sensor": [

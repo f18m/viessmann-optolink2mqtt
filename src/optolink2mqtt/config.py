@@ -302,6 +302,8 @@ class Config:
             reg["byte_filter"] = None
         if "enum" not in reg:
             reg["enum"] = None
+        if "raw" not in reg:
+            reg["raw"] = False
 
         if "ha_discovery" not in reg:
             # HA discovery disabled for this task:

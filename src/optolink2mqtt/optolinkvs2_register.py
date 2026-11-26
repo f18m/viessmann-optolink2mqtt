@@ -67,6 +67,9 @@ class OptolinkVS2Register:
         if self.ha_discovery is not None:
             self.check_ha_discovery_validity()
 
+        # raw mode flag
+        self.raw = bool(reg.get("raw", False))
+
     def _sanitize_name(self, name: str) -> str:
         """
         Returns a sanitized version of the given name, suitable to be used as MQTT topic part
@@ -127,7 +130,7 @@ class OptolinkVS2Register:
         """
         Returns a human-readable description for this register
         """
-        return f"name=[{self.name}], addr=0x{self.address:04X}, len={self.length}, signed={self.signed}, scale={self.scale_factor}, byte_filter={self.byte_filter}, enum={self.enum_dict}, has HA discovery={self.ha_discovery is not None}"
+        return f"name=[{self.name}], addr=0x{self.address:04X}, len={self.length}, signed={self.signed}, scale={self.scale_factor}, byte_filter={self.byte_filter}, enum={self.enum_dict}, raw={self.raw}, has HA discovery={self.ha_discovery is not None}"
 
     def get_next_occurrence_in_seconds(self) -> float:
         """
@@ -144,6 +147,10 @@ class OptolinkVS2Register:
         otherwise it will return an integer or float depending on the scale factor.
         In case of invalid conversion, None is returned.
         """
+
+        if self.raw:
+            # Return hex string of raw bytes, e.g., "1970010104000000"
+            return rawdata.hex()
 
         if self.enum_dict is not None:
             val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
@@ -174,6 +181,27 @@ class OptolinkVS2Register:
         into the register of the Viessmann device.
         Returns None in case of conversion error.
         """
+        if self.raw:
+            # Expect hex string input, convert to bytearray
+            try:
+                # Remove any whitespace and common prefixes
+                str_value = str_value.strip()
+                if str_value.startswith("0x"):
+                    str_value = str_value[2:]
+                rawdata = bytearray.fromhex(str_value)
+                # Validate length matches register length
+                if len(rawdata) != self.length:
+                    logging.error(
+                        f"Hex value '{str_value}' for register '{self.name}' has {len(rawdata)} bytes, expected {self.length}."
+                    )
+                    return None
+                return rawdata
+            except ValueError:
+                logging.error(
+                    f"Invalid hex value '{str_value}' for raw register '{self.name}'; expected hex string like '1970010104000000'"
+                )
+                return None
+
         val = 0
         if self.enum_dict is not None:
             # reverse lookup in enum dict
@@ -276,7 +304,7 @@ class OptolinkVS2Register:
                 f"Register '{self.name}' has invalid HA discovery 'platform' property."
             )
 
-        HA_PLATFORMS_WRITABLE = ["switch", "select", "number"]
+        HA_PLATFORMS_WRITABLE = ["switch", "select", "number", "text"]
 
         if self.writable and self.ha_discovery["platform"] not in HA_PLATFORMS_WRITABLE:
             raise ValueError(
@@ -350,6 +378,12 @@ class OptolinkVS2Register:
             # or "min: 0" are meaningful and must be forwarded to HomeAssistant
             if self.ha_discovery.get(o) is not None:
                 msg[o] = self.ha_discovery[o]
+
+        # For raw registers, remove parameters that don't apply to hex string values
+        if self.raw:
+            for key in ["state_class", "unit_of_measurement", "device_class"]:
+                if key in msg:
+                    del msg[key]
 
         # "options" field is populated only for "select" and "sensor" platform with enum_dict defined
         if (
