@@ -94,7 +94,14 @@ class OptolinkInterface:
             None,  # serial port to forward data to a Vitoconnect
             self.show_received_bytes,
         )
-        if not protocol.init_vs2():
+        try:
+            initialized = protocol.init_vs2()
+        except BaseException:
+            # release the (exclusive) serial port, or the next reconnect cannot open it
+            self._close_serial(ser)
+            raise
+        if not initialized:
+            self._close_serial(ser)
             self._failed_initializations += 1
             logging.error("Cannot initialize Optolink VS2 protocol.")
             raise OptolinkConnectionFailed("Cannot initialize Optolink VS2 protocol")
@@ -108,7 +115,19 @@ class OptolinkInterface:
     def _discard_protocol(self) -> None:
         if self.protocol is not None:
             self._previous_protocol_errors += self.protocol.get_total_errors()
+            self._close_serial(self.protocol.ser)
             self.protocol = None
+
+    @staticmethod
+    def _close_serial(ser: serial.Serial) -> None:
+        """
+        Closes the serial port, releasing its exclusive lock. Errors are only logged:
+        the port is typically being closed because it already failed.
+        """
+        try:
+            ser.close()
+        except Exception as e:
+            logging.warning(f"Error while closing Optolink serial port: {e}")
 
     def handle_serial_error(self, e: Exception) -> Optional[float]:
         """
