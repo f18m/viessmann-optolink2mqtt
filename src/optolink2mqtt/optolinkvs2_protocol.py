@@ -422,8 +422,8 @@ class OptolinkVS2Protocol:
                     if self.show_opto_rx:
                         logging.debug(f"VS2 received: {inbuff.hex()}")
 
-                    # receive complete
-                    inbuff = inbuff[: pllen + 4]  # make sure no tailing trash
+                    # receive complete: STX + Len + Payload + CRC
+                    inbuff = inbuff[: pllen + 3]  # make sure no tailing trash
                     msgid = inbuff[2] & 0x0F
                     # msqn = (inbuff[3] & 0xE0) >> 5
                     # fctcd = inbuff[3] & 0x1F
