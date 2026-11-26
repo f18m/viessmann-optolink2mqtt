@@ -8,7 +8,6 @@ and HomeAssistant discovery functionality.
 
 import sys
 import os
-import pytest
 
 # load code living in the parent dir ../src/optolink2mqtt
 THIS_SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -263,6 +262,5 @@ class TestOptolinkVS2RegisterValueConversion:
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
 
-        # 256 cannot fit in 1 byte - will raise OverflowError from int.to_bytes()
-        with pytest.raises((ValueError, OverflowError)):
-            reg.get_rawdata_from_value("256")
+        # 256 cannot fit in 1 byte
+        assert reg.get_rawdata_from_value("256") is None

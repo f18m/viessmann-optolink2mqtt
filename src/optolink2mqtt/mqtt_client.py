@@ -394,8 +394,10 @@ class MqttClient:
         """
         MQTT callback in case a message is received on the REQUEST topic
         """
+        # NOTE: the payload comes from the network and is not guaranteed to be valid UTF-8;
+        # an exception raised here would stop the paho network thread
         logging.info(
-            f"Received MQTT message: topic=[{msg.topic}] payload=[{msg.payload.decode('UTF-8')}]"
+            f"Received MQTT message: topic=[{msg.topic}] payload=[{msg.payload.decode('UTF-8', errors='replace')}]"
         )
 
         # NOTE: an empty request_topic or ha_status_topic means the feature is disabled,
@@ -403,7 +405,7 @@ class MqttClient:
         if self.request_topic != "" and msg.topic.startswith(self.request_topic):
             logging.error("Feature not yet implemented. TODO.")
         elif self.ha_status_topic != "" and msg.topic == self.ha_status_topic:
-            mqtt_payload = msg.payload.decode("UTF-8")
+            mqtt_payload = msg.payload.decode("UTF-8", errors="replace")
             if mqtt_payload == "online":
                 logging.info(
                     "HomeAssistant status changed to 'online'. Need to publish MQTT discovery messages."
