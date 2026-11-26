@@ -398,9 +398,11 @@ class MqttClient:
             f"Received MQTT message: topic=[{msg.topic}] payload=[{msg.payload.decode('UTF-8')}]"
         )
 
-        if msg.topic.startswith(self.request_topic):
+        # NOTE: an empty request_topic or ha_status_topic means the feature is disabled,
+        # and must not match any topic (every topic starts with "")
+        if self.request_topic != "" and msg.topic.startswith(self.request_topic):
             logging.error("Feature not yet implemented. TODO.")
-        elif msg.topic == self.ha_status_topic:
+        elif self.ha_status_topic != "" and msg.topic == self.ha_status_topic:
             mqtt_payload = msg.payload.decode("UTF-8")
             if mqtt_payload == "online":
                 logging.info(
