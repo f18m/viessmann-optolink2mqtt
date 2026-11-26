@@ -41,7 +41,17 @@ mqtt:
     # Set the password with MQTT_BROKER_PASSWORD or provide a Docker secret file using
     # MQTT_BROKER_PASSWORD_FILE=/run/secrets/mqtt_broker_password.
     # MQTT_BROKER_PASSWORD takes precedence if both environment variables are set.
+    # NOTE: the password is sent only if the username is set as well.
     #password:
+    # tls: if true, connect to the broker over TLS and verify its certificate.
+    # Defaults to true if the port is 8883, false otherwise.
+    #tls: false
+    # ca_certs: CA bundle used to verify the broker certificate; defaults to the system CA store.
+    #ca_certs: /etc/ssl/certs/my-broker-ca.pem
+    # certfile/keyfile: optional client certificate and private key, for brokers requiring
+    # TLS client authentication.
+    #certfile:
+    #keyfile:
   
   # client_id: the identifier of the MQTT client created by optolink2mqtt; this is useful to identify optolink2mqtt
   # when inspecting the MQTT broker logs

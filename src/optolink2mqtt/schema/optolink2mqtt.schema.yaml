@@ -37,6 +37,10 @@ mqtt_broker:
   port: int()
   username: str(required=False)
   password: str(required=False)
+  tls: bool(required=False) # defaults to true when port is 8883, false otherwise
+  ca_certs: str(required=False)
+  certfile: str(required=False)
+  keyfile: str(required=False)
 ---
 register_definition: 
   name: str()

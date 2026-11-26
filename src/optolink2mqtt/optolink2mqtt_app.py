@@ -422,12 +422,17 @@ class Optolink2MqttApp:
         """
 
         # estabilish a connection to the MQTT broker
+        broker = self.config.config["mqtt"]["broker"]
         try:
             self.enhanced_mqtt_client.connect(
-                self.config.config["mqtt"]["broker"]["host"],
-                self.config.config["mqtt"]["broker"]["port"],
-                self.config.config["mqtt"]["broker"]["username"],
-                self.config.config["mqtt"]["broker"]["password"],
+                broker["host"],
+                broker["port"],
+                broker["username"],
+                broker["password"],
+                tls=broker["tls"],
+                ca_certs=broker["ca_certs"],
+                certfile=broker["certfile"],
+                keyfile=broker["keyfile"],
             )
         except ConnectionRefusedError as e:
             logging.error(f"Cannot connect to MQTT broker: {e}. Retrying shortly.")
