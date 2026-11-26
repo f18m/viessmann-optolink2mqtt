@@ -35,24 +35,6 @@ class MqttClient:
     need to be re-published).
     """
 
-    # Counter of MQTT broker disconnections
-    num_disconnects = 0
-
-    # Counter of messages that were published successfully
-    num_published_successful = 0
-
-    # Counter of total messages reaching the MqttClient.publish()
-    num_published_total = 0
-
-    # Counter of total subscriptions made
-    num_subscriptions = 0
-
-    # Counter of total messages received from subscribed topics
-    num_received_messages = 0
-
-    # Counter of received messages dropped because the message queue was full
-    num_dropped_messages = 0
-
     # Constant value indicating the absence of a connection to the broker from get_connection_id()
     CONN_ID_INVALID = 0
 
@@ -93,9 +75,27 @@ class MqttClient:
         # topics to (re)subscribe at every successful connection to the broker
         self._extra_topics: list[str] = []
 
+        # per-instance counters; each one is written by a single thread only (either the
+        # main thread or the paho network thread), so no lock is needed to update them:
+        # Counter of MQTT broker disconnections (paho thread)
+        self.num_disconnects = 0
+        # Counter of messages that were published successfully (paho thread)
+        self.num_published_successful = 0
+        # Counter of total messages reaching the MqttClient.publish() (main thread)
+        self.num_published_total = 0
+        # Counter of total subscriptions made (main thread)
+        self.num_subscriptions = 0
+        # Counter of total messages received from subscribed topics (paho thread)
+        self.num_received_messages = 0
+        # Counter of received messages dropped because the message queue was full (paho thread)
+        self.num_dropped_messages = 0
+
         # internal flags:
         self._connection_id = MqttClient.CONN_ID_INVALID
         self._connection_rejected = False
+        # set by the paho thread, consumed by the main thread: protected by a lock so
+        # that a request arriving while the main thread consumes the flag is not lost
+        self._ha_discovery_lock = threading.Lock()
         self._ha_discovery_messages_requested = False
         self._disconnect_notification_lock = threading.Lock()
         self._disconnect_notification_pending = False
@@ -181,7 +181,7 @@ class MqttClient:
         Publish a message to the MQTT broker
         """
         logging.debug("MqttClient.publish on [%s] value [%s]", topic, payload)
-        MqttClient.num_published_total += 1
+        self.num_published_total += 1
 
         # NOTE: we simplify the code by ignoring the returned MQTTMessageInfo object...
         # in case of problems, the on_publish() callback will not be called
@@ -196,7 +196,7 @@ class MqttClient:
         regardless of the retain flag provided at construction time
         """
         logging.debug("MqttClient.publish retained on [%s] value [%s]", topic, payload)
-        MqttClient.num_published_total += 1
+        self.num_published_total += 1
         self._mqttc.publish(topic, payload, qos=self.qos, retain=True)
         return
 
@@ -212,7 +212,7 @@ class MqttClient:
             logging.error(f"Error subscribing to topic '{topic}': return code {ret[0]}")
             return False
 
-        MqttClient.num_subscriptions += 1
+        self.num_subscriptions += 1
         return True
 
     def loop_start(self) -> None:
@@ -261,8 +261,9 @@ class MqttClient:
         """
         Returns the value of the internal flag _ha_discovery_messages_requested and resets it
         """
-        ret = self._ha_discovery_messages_requested
-        self._ha_discovery_messages_requested = False
+        with self._ha_discovery_lock:
+            ret = self._ha_discovery_messages_requested
+            self._ha_discovery_messages_requested = False
         return ret
 
     def get_optolink2mqtt_status_topic(self) -> str:
@@ -283,17 +284,17 @@ class MqttClient:
 
     def get_human_friendly_stats(self) -> str:
         success_perc = 0.0
-        if MqttClient.num_published_total > 0:
+        if self.num_published_total > 0:
             success_perc = (
                 100.0
-                * float(MqttClient.num_published_successful)
-                / float(MqttClient.num_published_total)
+                * float(self.num_published_successful)
+                / float(self.num_published_total)
             )
         status = (
-            f"{MqttClient.num_disconnects} MQTT disconnections; "
-            f"{success_perc:0.1f}% of {MqttClient.num_published_total} successful MQTT published msgs; "
-            f"{MqttClient.num_received_messages} MQTT messages received; "
-            f"{MqttClient.num_dropped_messages} MQTT messages dropped; "
+            f"{self.num_disconnects} MQTT disconnections; "
+            f"{success_perc:0.1f}% of {self.num_published_total} successful MQTT published msgs; "
+            f"{self.num_received_messages} MQTT messages received; "
+            f"{self.num_dropped_messages} MQTT messages dropped; "
         )
         return status
 
@@ -392,7 +393,7 @@ class MqttClient:
                     f"retrying in {self.reconnect_period_sec} sec."
                 )
             else:
-                MqttClient.num_disconnects += 1
+                self.num_disconnects += 1
                 logging.warning(
                     f"OOOOPS! Unexpected disconnection from the MQTT broker with "
                     f"reason=[{reason_code}] for connection_id={self._connection_id}. "
@@ -425,7 +426,8 @@ class MqttClient:
                 logging.info(
                     "HomeAssistant status changed to 'online'. Need to publish MQTT discovery messages."
                 )
-                self._ha_discovery_messages_requested = True
+                with self._ha_discovery_lock:
+                    self._ha_discovery_messages_requested = True
             elif mqtt_payload == "offline":
                 # this is typically not a good news, unless it's a planned maintainance
                 logging.info("!!! HomeAssistant status changed to 'offline' !!!")
@@ -433,14 +435,14 @@ class MqttClient:
             # push the message to the thread-safe queue that was provided at construction time;
             # never block here: this runs in the paho network thread, which must keep servicing
             # the connection (e.g. keepalives) while the main thread is busy
-            MqttClient.num_received_messages += 1
+            self.num_received_messages += 1
             try:
                 self.message_queue.put_nowait(msg)
             except queue.Full:
-                MqttClient.num_dropped_messages += 1
+                self.num_dropped_messages += 1
                 logging.warning(
                     f"Dropping MQTT message on topic [{msg.topic}]: queue of pending messages is full "
-                    f"({MqttClient.num_dropped_messages} dropped so far)"
+                    f"({self.num_dropped_messages} dropped so far)"
                 )
         return
 
@@ -455,7 +457,7 @@ class MqttClient:
         """
         MQTT callback in case of successful/failed publish()
         """
-        MqttClient.num_published_successful += 1
+        self.num_published_successful += 1
         return
 
     def on_log(self, mqttc: paho.Client, userdata: Any, level: int, buf: str) -> None:
