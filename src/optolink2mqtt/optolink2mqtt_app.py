@@ -23,7 +23,6 @@ import os
 import queue
 import sched
 import socket
-import sys
 import termios
 import time
 
@@ -179,7 +178,11 @@ class Optolink2MqttApp:
 
     def setup(self) -> int:
         """
-        Application setup
+        Application setup.
+        Returns 0 on success, -1 when the process must exit successfully right away
+        (e.g. --version), or a positive exit code on failure:
+        2 = the config file cannot be loaded, 3 = no registers to poll,
+        4 = invalid register definition.
         """
 
         # CLI interface
@@ -216,7 +219,7 @@ class Optolink2MqttApp:
             self.config.load()
         except Exception as e:
             logging.error(f"Cannot load configuration: {e}. Aborting.")
-            sys.exit(2)
+            return 2
 
         self.config.apply_logging_config()
 

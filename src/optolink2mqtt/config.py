@@ -388,20 +388,29 @@ class Config:
 
         return reg
 
+    # values accepted for logging.level (WARN and ERR are kept for backward compatibility)
+    LOGGING_LEVELS = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARN": logging.WARNING,
+        "WARNING": logging.WARNING,
+        "ERR": logging.ERROR,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+
     def apply_logging_config(self):
-        # Apply logging config
+        """
+        Sets the level of the root logger from the 'logging.level' config value.
+        The handlers already installed on the root logger are left untouched.
+        """
         logl = self.config["logging"]["level"]
         logging.info(f"Setting log level to {logl}")
-        if logl == "DEBUG":
-            logging.basicConfig(level=logging.DEBUG, force=True)
-        elif logl == "INFO":
-            logging.basicConfig(level=logging.INFO, force=True)
-        elif logl == "WARN" or logl == "WARNING":
-            logging.basicConfig(level=logging.WARNING, force=True)
-        elif logl == "ERR" or logl == "ERROR":
-            logging.basicConfig(level=logging.ERROR, force=True)
-        else:
+        level = Config.LOGGING_LEVELS.get(str(logl).upper())
+        if level is None:
             logging.error(
-                f"Invalid logging level '{logl}' in config file. Defaulting to ERROR level."
+                f"Invalid logging level '{logl}' in config file. Expected one of "
+                f"{list(Config.LOGGING_LEVELS)}. Defaulting to ERROR level."
             )
-            logging.basicConfig(level=logging.ERROR, force=True)
+            level = logging.ERROR
+        logging.getLogger().setLevel(level)
