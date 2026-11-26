@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import logging
-import platform
 import queue
 from collections.abc import Iterable
 from typing import Any
@@ -227,12 +226,11 @@ class EnhancedMqttClient:
         device = {
             "ids": self.device_name,
             "name": self.device_name,
+            # this HA device is the optolink2mqtt bridge (named after its host by default),
+            # not the Viessmann unit, whose model/firmware optolink2mqtt does not know
             "manufacturer": "f18m/viessmann-optolink2mqtt",
-            # FIXME: maybe we should ask in the config file for the Viessmann device model instead of
-            #        using the Linux OS platform for this sw?
-            "sw_version": platform.system(),
-            "hw_version": platform.machine(),
-            "model": platform.platform(terse=True),
+            "model": "optolink2mqtt",
+            "sw_version": self.optolink2mqtt_version,
             "configuration_url": "https://github.com/f18m/viessmann-optolink2mqtt",
         }
         num_msgs = 0

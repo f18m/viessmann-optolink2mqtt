@@ -179,3 +179,34 @@ def test_optolink_connection_status_is_published_only_when_needed(monkeypatch):
         "optolink2mqtt/optolink2mqtt_status/optolink",
         "disconnected",
     )
+
+
+def test_discovery_device_reports_optolink2mqtt_not_host_os(monkeypatch):
+    import platform
+
+    register = Mock()
+    register.sampling_period_sec = 20
+    register.get_ha_discovery_payload.return_value = '{"name": "Temperature"}'
+    register.get_ha_discovery_topic.return_value = (
+        "homeassistant/sensor/device/temp/config"
+    )
+    client, paho_client = create_client(
+        monkeypatch,
+        {"enabled": True, "topic": "homeassistant", "device_name": "device"},
+        [register],
+    )
+
+    client.publish_discovery_messages()
+
+    device = register.get_ha_discovery_payload.call_args.args[2]
+    assert device["sw_version"] == "1.2.3"
+    assert device["model"] == "optolink2mqtt"
+    assert "hw_version" not in device
+    host_values = {platform.system(), platform.machine(), platform.platform(terse=True)}
+    assert not host_values & set(device.values())
+
+    # the diagnostic entities share the same device
+    for call in paho_client.publish.call_args_list:
+        payload = json.loads(call.args[1])
+        if "device" in payload:
+            assert payload["device"] == device
