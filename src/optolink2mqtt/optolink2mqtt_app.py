@@ -104,6 +104,9 @@ class Optolink2MqttApp:
         Callback invoked by the scheduler when it's time to read a register.
         Please note that this is a static method, so all data must be accessed
         through the 'app' parameter.
+
+        IMPORTANT: since this callback is also self-requeuing, the main body should
+        call this only once per register occurrence.
         """
 
         logging.debug(
@@ -360,8 +363,8 @@ class Optolink2MqttApp:
         self.scheduler.enter(
             0.01,  # close-to-zero delay
             Optolink2MqttApp.HIGH_SCHEDULER_PRIORITY,
-            Optolink2MqttApp.on_schedule_timer,
-            (self, reg),
+            self._sample_register,
+            (reg,),
         )
 
     def _core_loop(self) -> None:
