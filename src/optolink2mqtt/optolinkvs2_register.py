@@ -57,7 +57,9 @@ class OptolinkVS2Register:
         self.signed = bool(reg["signed"])
         self.writable = bool(reg["writable"])
         self.scale_factor = float(reg["scale_factor"])
-        self.byte_filter = str(reg["byte_filter"])
+        # byte_filter is either None or a string in the format "b:<start>:<end>" (inclusive)
+        self.byte_filter = reg["byte_filter"]
+        self._byte_filter_slice = self._parse_byte_filter(self.byte_filter)
         self.enum_dict = reg["enum"]
 
         # optional Home Assistant discovery configuration
@@ -95,6 +97,32 @@ class OptolinkVS2Register:
         sanitized = sanitized.encode("ascii", errors="ignore").decode("ascii")
         return sanitized
 
+    def _parse_byte_filter(self, byte_filter: str | None) -> slice | None:
+        """
+        Parses a byte filter in the format "b:<start>:<end>" (both indexes inclusive)
+        into a slice. Returns None if no byte filter is configured.
+        Raises ValueError if the byte filter is malformed or out of the register bounds.
+        """
+        if byte_filter is None:
+            return None
+
+        parts = str(byte_filter).split(":")
+        try:
+            if len(parts) != 3 or parts[0] != "b":
+                raise ValueError("expected format 'b:<start>:<end>'")
+            start = int(parts[1])
+            end = int(parts[2])
+        except ValueError as e:
+            raise ValueError(
+                f"Register '{self.name}' has invalid byte_filter '{byte_filter}': {e}"
+            )
+        if not 0 <= start <= end < self.length:
+            raise ValueError(
+                f"Register '{self.name}' has invalid byte_filter '{byte_filter}': "
+                f"indexes must satisfy 0 <= start <= end < length ({self.length})"
+            )
+        return slice(start, end + 1)
+
     def get_human_readable_description(self) -> str:
         """
         Returns a human-readable description for this register
@@ -121,13 +149,9 @@ class OptolinkVS2Register:
             val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
             return self.enum_dict.get(val, f"Unknown ({val})")
         else:
-            if self.byte_filter is not None:
+            if self._byte_filter_slice is not None:
                 # apply byte filter
-                parts = self.byte_filter.split(":")
-                if parts[0] == "b" and len(parts) == 3:
-                    start = int(parts[1])
-                    end = int(parts[2]) + 1  # inclusive
-                    rawdata = rawdata[start:end]
+                rawdata = rawdata[self._byte_filter_slice]
 
             val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
 
