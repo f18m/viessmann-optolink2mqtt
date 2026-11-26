@@ -28,6 +28,7 @@ import time
 import serial
 import logging
 import enum
+from typing import Optional
 
 #
 # Constants
@@ -118,14 +119,21 @@ class ErrorCode(enum.IntEnum):
     LengthError = 7
     CRCError = 8
     Timeout = 9
-    LastRXError = 9
+    # the telegram is not a Response Message (e.g. a stray Request Message)
+    MessageIdError = 10
+    # the telegram is a response for a different address than the requested one
+    AddressMismatch = 11
+    LastRXError = 11
 
     # Possible TX errors:
-    FirstTXError = 10
-    WriteFailure = 10
-    LastTXError = 10
+    FirstTXError = 12
+    WriteFailure = 12
+    # the request cannot be encoded in a VS2 telegram (address or length out of range);
+    # nothing is sent to the device
+    InvalidRequest = 13
+    LastTXError = 13
 
-    LastValue = 10
+    LastValue = 13
 
 
 class OptolinkVS2RxData:
@@ -150,6 +158,12 @@ class OptolinkVS2RxData:
 
     def is_successful(self) -> bool:
         return self.receive_code == ErrorCode.Success
+
+
+# VS2 telegrams carry the payload length in a single byte, and the payload of a
+# Virtual_READ response / Virtual_WRITE request is 5 bytes of header plus the data:
+MAX_DATA_LEN = 0xFF - 5
+MAX_ADDRESS = 0xFFFF
 
 
 class OptolinkVS2Protocol:
@@ -238,7 +252,24 @@ class OptolinkVS2Protocol:
     #     retcode, _, _ = self.write_datapoint_ext(addr, data)
     #     return retcode == 0x01
 
+    def _check_request(self, addr: int, length: int) -> bool:
+        """
+        Returns False (and counts an InvalidRequest error) if the address or the
+        data length cannot be encoded in a VS2 telegram.
+        """
+        if 0 <= addr <= MAX_ADDRESS and 0 <= length <= MAX_DATA_LEN:
+            return True
+        logging.error(
+            f"VS2: invalid request for address {addr} with length {length}: "
+            f"address must be in [0, 0x{MAX_ADDRESS:04X}] and length in [0, {MAX_DATA_LEN}]"
+        )
+        self.stats_by_receive_code[ErrorCode.InvalidRequest] += 1
+        return False
+
     def read_datapoint_ext(self, addr: int, rdlen: int) -> OptolinkVS2RxData:
+        if not self._check_request(addr, rdlen):
+            return OptolinkVS2RxData(ErrorCode.InvalidRequest, addr, bytearray())
+
         outbuff = bytearray(8)
         outbuff[0] = 0x41  # 0x41 frame start
         outbuff[1] = 0x05  # Len Payload
@@ -254,10 +285,13 @@ class OptolinkVS2Protocol:
             self.stats_by_receive_code[ErrorCode.WriteFailure] += 1
             return OptolinkVS2RxData(ErrorCode.WriteFailure, addr, bytearray())
 
-        return self.receive_telegram(resptelegr=True, raw=False)
+        return self.receive_telegram(resptelegr=True, raw=False, expected_addr=addr)
 
     def write_datapoint_ext(self, addr: int, data: bytes) -> OptolinkVS2RxData:
         wrlen = len(data)
+        if not self._check_request(addr, wrlen):
+            return OptolinkVS2RxData(ErrorCode.InvalidRequest, addr, bytearray())
+
         outbuff = bytearray(wrlen + 8)
         outbuff[0] = 0x41
         outbuff[1] = 5 + wrlen
@@ -275,7 +309,7 @@ class OptolinkVS2Protocol:
             self.stats_by_receive_code[ErrorCode.WriteFailure] += 1
             return OptolinkVS2RxData(ErrorCode.WriteFailure, addr, bytearray())
 
-        return self.receive_telegram(resptelegr=True, raw=False)
+        return self.receive_telegram(resptelegr=True, raw=False, expected_addr=addr)
 
     # ------------------------------------------------------------------
     # Generic request
@@ -284,6 +318,9 @@ class OptolinkVS2Protocol:
     def do_request(
         self, fctcode: int, addr: int, rlen: int, data: bytes = b"", protid: int = 0x00
     ) -> OptolinkVS2RxData:
+        if not all(self._check_request(addr, n) for n in (rlen, len(data))):
+            return OptolinkVS2RxData(ErrorCode.InvalidRequest, addr, bytearray())
+
         pldlen = 5 + len(data)
         outbuff = bytearray(pldlen + 3)  # + STX, LEN, CRC
 
@@ -305,13 +342,15 @@ class OptolinkVS2Protocol:
             self.stats_by_receive_code[ErrorCode.WriteFailure] += 1
             return OptolinkVS2RxData(ErrorCode.WriteFailure, addr, bytearray())
 
-        return self.receive_telegram(resptelegr=True, raw=False)
+        return self.receive_telegram(resptelegr=True, raw=False, expected_addr=addr)
 
     # ------------------------------------------------------------------
     # Telegram receive
     # ------------------------------------------------------------------
 
-    def receive_telegram(self, resptelegr: bool, raw: bool) -> OptolinkVS2RxData:
+    def receive_telegram(
+        self, resptelegr: bool, raw: bool, expected_addr: Optional[int] = None
+    ) -> OptolinkVS2RxData:
         """
         Receives a VS2 telegram in response to a Virtual_READ or Virtual_WRITE request.
 
@@ -325,6 +364,10 @@ class OptolinkVS2Protocol:
             Specifies whether the receive mode is raw (unprocessed).
             True = Raw data mode (no protocol evaluation),
             False = Decoded protocol data.
+
+        expected_addr: Optional[int]
+            If not None, the address the response telegram must refer to: a response
+            for any other address is rejected with ErrorCode.AddressMismatch.
 
         Return values:
         -------------
@@ -443,14 +486,13 @@ class OptolinkVS2Protocol:
                             retdata if not raw else bytearray(alldata),
                         )
 
-                    if msgid == MessageIdentifier.ErrorMessage:
-                        logging.error(
-                            f"VS2 Error: dlen={dlen} content[hex]={retdata.hex()}"
-                        )
-
-                        self.stats_by_receive_code[ErrorCode.ErrorMessage] += 1
+                    error = self._check_response(
+                        resptelegr, msgid, addr, expected_addr, dlen, retdata
+                    )
+                    if error is not None:
+                        self.stats_by_receive_code[error] += 1
                         return OptolinkVS2RxData(
-                            ErrorCode.ErrorMessage,
+                            error,
                             addr,
                             retdata if not raw else bytearray(alldata),
                         )
@@ -472,6 +514,34 @@ class OptolinkVS2Protocol:
         return OptolinkVS2RxData(
             ErrorCode.Timeout, addr, retdata if not raw else bytearray(retdata)
         )
+
+    @staticmethod
+    def _check_response(
+        resptelegr: bool,
+        msgid: int,
+        addr: int,
+        expected_addr: Optional[int],
+        dlen: int,
+        retdata: bytearray,
+    ) -> Optional[ErrorCode]:
+        """
+        Checks that a telegram received with a valid CRC is a successful response to the
+        request that was sent. Returns the error code to report, or None if it is.
+        """
+        if msgid == MessageIdentifier.ErrorMessage:
+            logging.error(f"VS2 Error: dlen={dlen} content[hex]={retdata.hex()}")
+            return ErrorCode.ErrorMessage
+        if resptelegr and msgid != MessageIdentifier.ResponseMessage:
+            logging.error(
+                f"VS2 unexpected message identifier {msgid}: expected a Response Message"
+            )
+            return ErrorCode.MessageIdError
+        if expected_addr is not None and addr != expected_addr:
+            logging.error(
+                f"VS2 address mismatch: requested=0x{expected_addr:04X} received=0x{addr:04X}"
+            )
+            return ErrorCode.AddressMismatch
+        return None
 
     # ------------------------------------------------------------------
     # Raw receive
