@@ -342,6 +342,8 @@ class Optolink2MqttApp:
 
         # try to convert the payload into raw bytes to be written to the register
         raw_data = reg.get_rawdata_from_value(payload)
+        if raw_data is not None and not reg.is_within_write_bounds(raw_data):
+            raw_data = None
 
         # perform the write operation
         if raw_data is not None:
