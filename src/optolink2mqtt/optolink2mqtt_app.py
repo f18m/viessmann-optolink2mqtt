@@ -264,6 +264,17 @@ class Optolink2MqttApp:
                 logging.error(f"Cannot parse register definition #{i}: {e}. Aborting.")
                 return 4
 
+            # two registers sharing the same topics would overwrite each other's values
+            cmd_topic = register_instance.get_mqtt_command_topic()
+            other = self.register_list_by_cmd_topic.get(cmd_topic)
+            if other is not None:
+                logging.error(
+                    f"Register definition #{i} '{register_instance.name}' maps to the same "
+                    f"MQTT topic '{register_instance.get_mqtt_state_topic()}' as register "
+                    f"'{other.name}': register names must be unique once sanitized. Aborting."
+                )
+                return 4
+
             logging.info(
                 f"Definition of register#{i}: {register_instance.get_human_readable_description()}"
             )
@@ -283,9 +294,7 @@ class Optolink2MqttApp:
 
             # store the OptolinkVS2Register also locally, in a dict that helps later
             # to process incoming MQTT write requests:
-            self.register_list_by_cmd_topic[
-                register_instance.get_mqtt_command_topic()
-            ] = register_instance
+            self.register_list_by_cmd_topic[cmd_topic] = register_instance
 
         #
         # create enhanced MQTT client
