@@ -551,7 +551,7 @@ class OptolinkVS2Protocol:
         self, eot_time: float, timeout: float
     ) -> tuple[ErrorCode, bytearray]:
         inbuff = b""
-        start = time.time()
+        start = time.monotonic()
         last_rx = start
 
         while True:
@@ -559,14 +559,14 @@ class OptolinkVS2Protocol:
             if inbytes:
                 # Add data to the data buffer
                 inbuff += inbytes
-                last_rx = time.time()
+                last_rx = time.monotonic()
                 if self.ser2:
                     self.ser2.write(inbytes)
-            elif inbuff and (time.time() - last_rx) > eot_time:
+            elif inbuff and (time.monotonic() - last_rx) > eot_time:
                 # if data received and no further receive since more than eot_time
                 return ErrorCode.Success, bytearray(inbuff)
 
-            if (time.time() - start) > timeout:
+            if (time.monotonic() - start) > timeout:
                 return ErrorCode.Timeout, bytearray(inbuff)
 
             time.sleep(0.005)
