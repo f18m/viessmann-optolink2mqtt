@@ -22,8 +22,10 @@ import logging
 import os
 import queue
 import sched
+import signal
 import socket
 import termios
+import threading
 import time
 
 import paho.mqtt.client as paho  # pip install paho-mqtt
@@ -55,6 +57,11 @@ class Optolink2MqttApp:
         self.scheduler = None  # instance of sched.scheduler
         self.optolink_interface = None  # instance of OptolinkInterface
         self.last_logged_status = (None, None, None)
+
+        # set by request_stop() (e.g. on SIGTERM/SIGINT) to leave the main loop;
+        # all waits in the main loop go through this event so they wake up immediately
+        self.keep_running = False
+        self._stop_event = threading.Event()
 
         # dict of OptolinkVS2Register instances keyed by their COMMAND TOPIC
         self.register_list_by_cmd_topic = {}
@@ -175,6 +182,24 @@ class Optolink2MqttApp:
         self.enhanced_mqtt_client.publish_optolink_connection_status(
             self.optolink_interface.is_connected(), force
         )
+
+    def request_stop(self, reason: str) -> None:
+        """
+        Asks the main loop to exit: run() then disconnects cleanly from the MQTT broker.
+        Safe to call from a signal handler.
+        """
+        logging.warning(f"{reason}: stopping optolink2mqtt")
+        self.keep_running = False
+        self._stop_event.set()
+
+    def _on_stop_signal(self, signum: int, frame) -> None:
+        self.request_stop(f"{signal.Signals(signum).name} received")
+
+    def _wait(self, delay_sec: float) -> bool:
+        """
+        Waits up to delay_sec seconds, returning early (True) if a stop was requested.
+        """
+        return self._stop_event.wait(delay_sec)
 
     def setup(self) -> int:
         """
@@ -465,15 +490,37 @@ class Optolink2MqttApp:
             f"Executed {self.enhanced_mqtt_client.num_subscriptions} MQTT subscriptions for writable registers."
         )
 
+        # block the main thread on the MQTT client loop
+        self.keep_running = True
+        self._stop_event.clear()
+
+        # Docker/systemd stop the process with SIGTERM: handle it (and SIGINT) by
+        # leaving the main loop, so that we can disconnect cleanly from the broker
+        previous_handlers = {
+            signum: signal.signal(signum, self._on_stop_signal)
+            for signum in (signal.SIGTERM, signal.SIGINT)
+        }
+
+        # Start MQTT processing before Optolink setup so failures during startup can
+        # publish status metrics while the interface is retrying.
+        self.enhanced_mqtt_client.loop_start()
+        try:
+            return self._main_loop()
+        finally:
+            for signum, handler in previous_handlers.items():
+                signal.signal(signum, handler)
+            self._shutdown()
+
+    def _main_loop(self) -> int:
+        """
+        Keeps the Optolink connection up and runs the core loop till a stop is requested
+        or the Optolink connection cannot be recovered. Returns the exit code.
+        """
+
         # at the start of the application we need to establish the Optolink connection
         # and that might be required later on as well in case of serial port errors
         new_optolink_conn_required = True
 
-        # block the main thread on the MQTT client loop
-        self.keep_running = True
-        # Start MQTT processing before Optolink setup so failures during startup can
-        # publish status metrics while the interface is retrying.
-        self.enhanced_mqtt_client.loop_start()
         while self.keep_running:
             try:
                 if new_optolink_conn_required:
@@ -499,7 +546,7 @@ class Optolink2MqttApp:
                 logging.error(
                     f"socket/network error caught: {e}, sleeping for {reconn_period_sec} sec..."
                 )
-                time.sleep(reconn_period_sec)
+                self._wait(reconn_period_sec)
 
             # try to recover from SERIAL/OPTOLINK exceptions:
             except (
@@ -519,7 +566,8 @@ class Optolink2MqttApp:
                     # exceeded max time for reconnecting... exit the application
                     return 2 if isinstance(e, OptolinkConnectionFailed) else 1
 
-                time.sleep(reconnect_delay_sec)
+                if self._wait(reconnect_delay_sec):
+                    break  # stop requested
 
                 # ask for a new optolink connection on the next loop iteration
                 new_optolink_conn_required = True
@@ -531,12 +579,18 @@ class Optolink2MqttApp:
                 logging.warning("KeyboardInterrupt caught, exiting")
                 break
 
-        # gracefully stop the event loop of MQTT client
+        return 0
+
+    def _shutdown(self) -> None:
+        """
+        Disconnects from the MQTT broker and stops the MQTT client loop.
+        """
+        # publish the "offline" status (a clean disconnect does not trigger the last-will)
+        # and disconnect, then stop the event loop of MQTT client
+        self.enhanced_mqtt_client.disconnect()
         self.enhanced_mqtt_client.loop_stop()
 
         # log status one last time
         self.log_status()
 
         logging.warning("Exiting gracefully")
-
-        return 0
