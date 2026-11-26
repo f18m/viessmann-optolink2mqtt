@@ -270,7 +270,7 @@ class Optolink2MqttApp:
 
             # upon startup optolink2mqtt will immediately run all scheduling rules, just
             # scattered 100ms one from each other:
-            first_time_delay_sec = i + 0.1
+            first_time_delay_sec = 0.1 * (i + 1)
 
             # include this in our scheduler:
             self.scheduler.enter(
@@ -394,35 +394,27 @@ class Optolink2MqttApp:
             if self.enhanced_mqtt_client.consume_disconnect_notification():
                 raise socket.error("MQTT client disconnected")
 
-            # execute all sampling operations waiting in the queue
+            self._publish_connection_status()
+
+            if self.enhanced_mqtt_client.check_if_time_to_send_discovery_messages():
+                self._sample_all_registers()
+
+            # execute all sampling operations that are due
             delay_for_next_register_sec = self.scheduler.run(blocking=False)
 
-            # execute a sliced wait, so we reuse this thread to check for other occurrences
+            # wait for an MQTT message until the next sampling operation is due, but
+            # wake up at least every quantum to run the checks above; a message is
+            # processed as soon as it arrives, and the next one (if any) right after
+            # the next scheduler run, so this thread is reused for everything
             # (instead of resorting to a multithread Python app)
-            time_waited_sec = 0
-            while (
-                delay_for_next_register_sec > 0
-                and time_waited_sec < delay_for_next_register_sec
-            ):
-                time.sleep(sleep_quantum_sec)
-                time_waited_sec += sleep_quantum_sec
-
-                if self.enhanced_mqtt_client.consume_disconnect_notification():
-                    raise socket.error("MQTT client disconnected")
-
-                self._publish_connection_status()
-
-                if (
-                    self.enhanced_mqtt_client is not None
-                    and self.enhanced_mqtt_client.check_if_time_to_send_discovery_messages()
-                ):
-                    self._sample_all_registers()
-
-                try:
-                    msg = self.message_queue.get_nowait()
-                    self._process_received_mqtt_message(msg)
-                except queue.Empty:
-                    continue  # no message to process
+            timeout_sec = sleep_quantum_sec
+            if delay_for_next_register_sec is not None:
+                timeout_sec = min(max(delay_for_next_register_sec, 0), timeout_sec)
+            try:
+                msg = self.message_queue.get(timeout=timeout_sec)
+            except queue.Empty:
+                continue  # no message to process
+            self._process_received_mqtt_message(msg)
 
     def run(self) -> int:
         """
