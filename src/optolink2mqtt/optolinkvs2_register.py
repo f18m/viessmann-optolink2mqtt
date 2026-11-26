@@ -213,6 +213,34 @@ class OptolinkVS2Register:
 
         return bytearray(rawdata)
 
+    def is_within_write_bounds(self, rawdata: bytearray) -> bool:
+        """
+        Returns True if the value encoded in the given raw data (as returned by
+        get_rawdata_from_value()) respects the 'min' and 'max' limits configured
+        in the HomeAssistant discovery metadata, if any.
+        These limits are enforced here as well, since any MQTT client (not only
+        HomeAssistant) can publish on the command topic.
+        """
+        if self.enum_dict is not None or self.ha_discovery is None:
+            return True
+
+        # compare the value that will actually be written, after rounding to the
+        # register resolution
+        val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
+        val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
+
+        min_val = self.ha_discovery.get("min")
+        max_val = self.ha_discovery.get("max")
+        if (min_val is not None and val < min_val) or (
+            max_val is not None and val > max_val
+        ):
+            logging.error(
+                f"Value {val} for register '{self.name}' is outside the configured range "
+                f"[{min_val if min_val is not None else '-inf'}, {max_val if max_val is not None else '+inf'}]"
+            )
+            return False
+        return True
+
     #
     # MQTT helpers
     #
