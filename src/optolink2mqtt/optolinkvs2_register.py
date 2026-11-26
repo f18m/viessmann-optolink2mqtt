@@ -66,7 +66,7 @@ class OptolinkVS2Register:
             self.check_ha_discovery_validity()
 
         # raw mode flag
-        self.raw = bool(reg["raw"])
+        self.raw = bool(reg.get("raw", False))
 
     def _sanitize_name(self, name: str) -> str:
         """
