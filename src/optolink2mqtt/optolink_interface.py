@@ -97,9 +97,7 @@ class OptolinkInterface:
         if not protocol.init_vs2():
             self._failed_initializations += 1
             logging.error("Cannot initialize Optolink VS2 protocol.")
-            raise OptolinkConnectionFailed(
-                "Cannot initialize Optolink VS2 protocol"
-            )
+            raise OptolinkConnectionFailed("Cannot initialize Optolink VS2 protocol")
 
         self.protocol = protocol
         self.reconn_attempts = 0

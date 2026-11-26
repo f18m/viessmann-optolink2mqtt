@@ -281,9 +281,12 @@ class OptolinkVS2Register:
             "step",
             "mode",
             "optimistic",
+            "value_template",
         ]
         for o in optional_parameters:
-            if o in self.ha_discovery and self.ha_discovery[o]:
+            # NOTE: compare against None, since falsy values like "optimistic: false"
+            # or "min: 0" are meaningful and must be forwarded to HomeAssistant
+            if self.ha_discovery.get(o) is not None:
                 msg[o] = self.ha_discovery[o]
 
         # "options" field is populated only for "select" and "sensor" platform with enum_dict defined
@@ -299,7 +302,7 @@ class OptolinkVS2Register:
             msg["command_topic"] = self.get_mqtt_command_topic()
 
         # expire_after is populated with user preference or a meaningful default value:
-        if self.ha_discovery["expire_after"]:
+        if self.ha_discovery.get("expire_after") is not None:
             msg["expire_after"] = self.ha_discovery["expire_after"]
         elif default_expire_after:
             msg["expire_after"] = default_expire_after
