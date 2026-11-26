@@ -3,6 +3,12 @@
 
 # viessmann-optolink2mqtt
 
+<div align="center">
+
+⭐ If you find this App useful, please star this repo - it helps others discover the project! ⭐
+
+</div>
+
 Open-source [MQTT](https://en.wikipedia.org/wiki/MQTT) bridge for [Viessmann](https://en.wikipedia.org/wiki/Viessmann) heating systems using the Optolink interface.
 
 This project connects a [Viessmann](https://en.wikipedia.org/wiki/Viessmann) device such as a heat pump or gas boiler to a local [MQTT](https://en.wikipedia.org/wiki/MQTT) broker, allowing you to read live telemetry, control writable registers, and integrate everything into Home Assistant or any other MQTT-capable automation stack without sending data to a vendor cloud.
@@ -117,7 +123,8 @@ This software accepts declarative configuration in YAML format. Use [optolink2mq
 
 ## How to discover register addresses
 
-This section is still to be written.
+Please check my translation of the [Viessmann register mappings](https://github.com/f18m/viessmann-parameters-english) to get a good starting point.
+
 
 ## 🔌 Serial port naming
 
