@@ -313,9 +313,11 @@ class Config:
                 # "measurement" is a good default since most of psutil/pySMART tasks represent measurements
                 # of bytes, percentages, temperatures, etc.
                 # We just make sure to never add "state_class" to some types of "device_class"es that will
-                # trigger errors on the HomeAssistant side...
+                # trigger errors on the HomeAssistant side, and to platforms other than "sensor",
+                # since "state_class" is a sensor-only attribute in HomeAssistant.
                 if (
-                    h["device_class"]
+                    h["platform"] == "sensor"
+                    and h["device_class"]
                     not in HA_UNSUPPORTED_DEVICE_CLASSES_FOR_MEASUREMENTS
                 ):
                     h["state_class"] = "measurement"
