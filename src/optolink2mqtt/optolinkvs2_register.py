@@ -196,32 +196,33 @@ class OptolinkVS2Register:
 
     def check_ha_discovery_validity(self) -> None:
         """
-        Checks if HA discovery information are coherent with the register definition
+        Checks if HA discovery information are coherent with the register definition.
+        Raises ValueError if they are not.
         """
         # ensure ha_discovery is a dict
         if not isinstance(self.ha_discovery, dict):
-            raise Exception(
+            raise ValueError(
                 f"Register '{self.name}' has invalid HA discovery configuration."
             )
 
         # required parameters: name & platform
         if self.ha_discovery["name"] is None or self.ha_discovery["name"] == "":
-            raise Exception(
+            raise ValueError(
                 f"Register '{self.name}' has invalid HA discovery 'name' property."
             )
         if self.ha_discovery["platform"] is None or self.ha_discovery["platform"] == "":
-            raise Exception(
+            raise ValueError(
                 f"Register '{self.name}' has invalid HA discovery 'platform' property."
             )
 
         HA_PLATFORMS_WRITABLE = ["switch", "select", "number"]
 
         if self.writable and self.ha_discovery["platform"] not in HA_PLATFORMS_WRITABLE:
-            raise Exception(
+            raise ValueError(
                 f"Register '{self.name}' is writable but has incompatible HA discovery 'platform' property '{self.ha_discovery['platform']}'."
             )
         if not self.writable and self.ha_discovery["platform"] in HA_PLATFORMS_WRITABLE:
-            raise Exception(
+            raise ValueError(
                 f"Register '{self.name}' is not writable but has incompatible HA discovery 'platform' property '{self.ha_discovery['platform']}'."
             )
 
