@@ -268,11 +268,13 @@ class MqttClient:
         )
 
     def get_human_friendly_stats(self) -> str:
-        success_perc = (
-            100.0
-            * float(MqttClient.num_published_successful)
-            / float(MqttClient.num_published_total)
-        )
+        success_perc = 0.0
+        if MqttClient.num_published_total > 0:
+            success_perc = (
+                100.0
+                * float(MqttClient.num_published_successful)
+                / float(MqttClient.num_published_total)
+            )
         status = (
             f"{MqttClient.num_disconnects} MQTT disconnections; "
             f"{success_perc:0.1f}% of {MqttClient.num_published_total} successful MQTT published msgs; "

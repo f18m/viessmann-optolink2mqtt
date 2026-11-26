@@ -538,6 +538,8 @@ class OptolinkVS2Protocol:
 
     def get_human_friendly_stats(self) -> str:
         total = self.get_total_rx_frames()
+        if total == 0:
+            return "no Optolink VS2 frames received yet"
         success_perc = (
             100.0 * float(self.stats_by_receive_code[ErrorCode.Success]) / float(total)
         )
