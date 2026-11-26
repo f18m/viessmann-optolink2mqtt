@@ -89,11 +89,7 @@ class OptolinkInterface:
             exclusive=True,
         )
 
-        protocol = OptolinkVS2Protocol(
-            ser,
-            None,  # serial port to forward data to a Vitoconnect
-            self.show_received_bytes,
-        )
+        protocol = OptolinkVS2Protocol(ser, self.show_received_bytes)
         try:
             initialized = protocol.init_vs2()
         except BaseException:
