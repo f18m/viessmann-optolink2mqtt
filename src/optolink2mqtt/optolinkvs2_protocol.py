@@ -252,16 +252,16 @@ class OptolinkVS2Protocol:
     #     retcode, _, _ = self.write_datapoint_ext(addr, data)
     #     return retcode == 0x01
 
-    def _check_request(self, addr: int, *lengths: int) -> bool:
+    def _check_request(self, addr: int, length: int) -> bool:
         """
-        Returns False (and counts an InvalidRequest error) if the address or one of the
-        data lengths cannot be encoded in a VS2 telegram.
+        Returns False (and counts an InvalidRequest error) if the address or the
+        data length cannot be encoded in a VS2 telegram.
         """
-        if 0 <= addr <= MAX_ADDRESS and all(0 <= n <= MAX_DATA_LEN for n in lengths):
+        if 0 <= addr <= MAX_ADDRESS and 0 <= length <= MAX_DATA_LEN:
             return True
         logging.error(
-            f"VS2: invalid request for address {addr} with length(s) {lengths}: "
-            f"address must be in [0, 0x{MAX_ADDRESS:04X}] and lengths in [0, {MAX_DATA_LEN}]"
+            f"VS2: invalid request for address {addr} with length {length}: "
+            f"address must be in [0, 0x{MAX_ADDRESS:04X}] and length in [0, {MAX_DATA_LEN}]"
         )
         self.stats_by_receive_code[ErrorCode.InvalidRequest] += 1
         return False
@@ -318,7 +318,7 @@ class OptolinkVS2Protocol:
     def do_request(
         self, fctcode: int, addr: int, rlen: int, data: bytes = b"", protid: int = 0x00
     ) -> OptolinkVS2RxData:
-        if not self._check_request(addr, rlen, len(data)):
+        if not all(self._check_request(addr, n) for n in (rlen, len(data))):
             return OptolinkVS2RxData(ErrorCode.InvalidRequest, addr, bytearray())
 
         pldlen = 5 + len(data)
