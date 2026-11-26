@@ -23,6 +23,7 @@ from typing import Dict, Any
 # import hashlib
 import json
 import logging
+from decimal import Decimal
 
 
 class OptolinkVS2Register:
@@ -36,7 +37,9 @@ class OptolinkVS2Register:
     to be written into the device.
     """
 
-    MAX_DECIMALS = 2
+    # scaled values are rounded to at least this many decimals, or to the number of
+    # decimals of the scale factor if it has more (e.g. 3 for a scale factor of 0.001)
+    MIN_DECIMALS = 2
 
     def __init__(
         self,
@@ -57,6 +60,12 @@ class OptolinkVS2Register:
         self.signed = bool(reg["signed"])
         self.writable = bool(reg["writable"])
         self.scale_factor = float(reg["scale_factor"])
+        self.decimals = max(
+            OptolinkVS2Register.MIN_DECIMALS,
+            -Decimal(repr(self.scale_factor)).normalize().as_tuple().exponent,
+        )
+        # the "suspiciously large unsigned value" warning is logged once per register
+        self._warned_about_unsigned = False
         # byte_filter is either None or a string in the format "b:<start>:<end>" (inclusive)
         self.byte_filter = reg["byte_filter"]
         self._byte_filter_slice = self._parse_byte_filter(self.byte_filter)
@@ -145,27 +154,25 @@ class OptolinkVS2Register:
         In case of invalid conversion, None is returned.
         """
 
+        if self._byte_filter_slice is not None:
+            # apply byte filter
+            rawdata = rawdata[self._byte_filter_slice]
+
+        val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
+
         if self.enum_dict is not None:
-            val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
             return self.enum_dict.get(val, f"Unknown ({val})")
-        else:
-            if self._byte_filter_slice is not None:
-                # apply byte filter
-                rawdata = rawdata[self._byte_filter_slice]
 
-            val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
-
-            if not self.signed:
-                maxpossible_value = int.from_bytes(
-                    [0xFF] * self.length, byteorder="little", signed=False
+        if not self.signed and not self._warned_about_unsigned:
+            maxpossible_value = (1 << (8 * len(rawdata))) - 1
+            if val > maxpossible_value * 0.9:
+                self._warned_about_unsigned = True
+                logging.warning(
+                    f"Register '{self.name}' read value {rawdata.hex()} is suspiciously close to the max possible value {maxpossible_value} for a {len(rawdata)}-byte value, which might indicate a SIGNED value was read in a register declared as UNSIGNED. Did you forget to declare this register as SIGNED? (this warning is logged only once)"
                 )
-                if val > maxpossible_value * 0.9:
-                    logging.warning(
-                        f"Register '{self.name}' read value {rawdata.hex()} is suspiciously close to the max possible value {maxpossible_value} for a {self.length}-long register, which might indicate a SIGNED value was read in a register declared as UNSIGNED. Did you forget to declare this register as SIGNED?"
-                    )
 
-            if self.scale_factor != 1.0:
-                val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
+        if self.scale_factor != 1.0:
+            val = round(val * self.scale_factor, self.decimals)
         return val
 
     def get_rawdata_from_value(self, str_value: str) -> bytearray | None:
@@ -189,12 +196,8 @@ class OptolinkVS2Register:
             # float() accepts "nan" and "inf", which cannot be converted to int
             try:
                 if self.scale_factor != 1.0:
-                    val = int(
-                        round(
-                            float(str_value) / self.scale_factor,
-                            OptolinkVS2Register.MAX_DECIMALS,
-                        )
-                    )
+                    # round to the nearest raw value (not truncate)
+                    val = round(float(str_value) / self.scale_factor)
                 else:
                     val = int(str_value)
             except (ValueError, OverflowError):
@@ -227,7 +230,7 @@ class OptolinkVS2Register:
         # compare the value that will actually be written, after rounding to the
         # register resolution
         val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
-        val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
+        val = round(val * self.scale_factor, self.decimals)
 
         min_val = self.ha_discovery.get("min")
         max_val = self.ha_discovery.get("max")
