@@ -182,8 +182,8 @@ class OptolinkVS2Protocol:
         self.ser2 = ser2
         self.show_opto_rx = show_opto_rx
 
-        # local stats array/list
-        self.stats_by_receive_code = [0] * ErrorCode.LastValue
+        # local stats array/list, indexed by ErrorCode (LastValue is a valid index too)
+        self.stats_by_receive_code = [0] * (ErrorCode.LastValue + 1)
 
     # ------------------------------------------------------------------
     # Initialization
@@ -521,18 +521,18 @@ class OptolinkVS2Protocol:
     def get_total_rx_frames(self) -> int:
         # sum the successfully-received frames:
         ret = self.stats_by_receive_code[ErrorCode.Success]
-        # with all frames failed to read:
-        for i in range(ErrorCode.FirstRXError, ErrorCode.LastRXError):
+        # with all frames failed to read (Last*Error values are inclusive):
+        for i in range(ErrorCode.FirstRXError, ErrorCode.LastRXError + 1):
             ret += self.stats_by_receive_code[i]
         return ret
 
     def get_total_errors(self) -> int:
         ret = 0
-        # sum RX errors:
-        for i in range(ErrorCode.FirstRXError, ErrorCode.LastRXError):
+        # sum RX errors (Last*Error values are inclusive):
+        for i in range(ErrorCode.FirstRXError, ErrorCode.LastRXError + 1):
             ret += self.stats_by_receive_code[i]
         # sum TX errors:
-        for i in range(ErrorCode.FirstTXError, ErrorCode.LastTXError):
+        for i in range(ErrorCode.FirstTXError, ErrorCode.LastTXError + 1):
             ret += self.stats_by_receive_code[i]
         return ret
 
