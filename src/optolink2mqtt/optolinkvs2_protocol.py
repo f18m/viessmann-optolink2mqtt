@@ -37,13 +37,6 @@ from typing import Optional
 # for some of these
 
 
-class ReceiveState(enum.IntEnum):
-    unknown = 0
-    ENQ = 1
-    ACK = 2
-    NACK = 3
-
-
 class MessageIdentifier(enum.IntEnum):
     RequestMessage = 0
     ResponseMessage = 1
@@ -177,7 +170,6 @@ class OptolinkVS2Protocol:
     def __init__(
         self,
         ser: serial.Serial,
-        ser2: serial.Serial = None,
         show_opto_rx: bool = False,
     ):
         """
@@ -185,15 +177,10 @@ class OptolinkVS2Protocol:
         ----------
         ser : serial.Serial
             Primary serial interface
-        ser2 : serial.Serial, optional
-            Secondary serial interface. This is used in the original optolink-splitter project
-            to forward every received byte to another serial port connected to the Vitoconnect device.
-            This is currently not supported by optolink2mqtt but might be in future.
         show_opto_rx : bool, optional
             If True, received Optolink bytes are logged for debugging purposes
         """
         self.ser = ser
-        self.ser2 = ser2
         self.show_opto_rx = show_opto_rx
 
         # local stats array/list, indexed by ErrorCode (LastValue is a valid index too)
@@ -396,8 +383,6 @@ class OptolinkVS2Protocol:
                 if inbytes:
                     inbuff += inbytes
                     alldata += inbytes
-                    if self.ser2:
-                        self.ser2.write(inbytes)
             except Exception:
                 self.stats_by_receive_code[ErrorCode.SerialPortError] += 1
                 return OptolinkVS2RxData(ErrorCode.SerialPortError, 0, retdata)
@@ -542,34 +527,6 @@ class OptolinkVS2Protocol:
             )
             return ErrorCode.AddressMismatch
         return None
-
-    # ------------------------------------------------------------------
-    # Raw receive
-    # ------------------------------------------------------------------
-
-    def receive_fullraw(
-        self, eot_time: float, timeout: float
-    ) -> tuple[ErrorCode, bytearray]:
-        inbuff = b""
-        start = time.monotonic()
-        last_rx = start
-
-        while True:
-            inbytes = self.ser.read_all()
-            if inbytes:
-                # Add data to the data buffer
-                inbuff += inbytes
-                last_rx = time.monotonic()
-                if self.ser2:
-                    self.ser2.write(inbytes)
-            elif inbuff and (time.monotonic() - last_rx) > eot_time:
-                # if data received and no further receive since more than eot_time
-                return ErrorCode.Success, bytearray(inbuff)
-
-            if (time.monotonic() - start) > timeout:
-                return ErrorCode.Timeout, bytearray(inbuff)
-
-            time.sleep(0.005)
 
     # ------------------------------------------------------------------
     # Helpers

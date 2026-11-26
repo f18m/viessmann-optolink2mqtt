@@ -45,7 +45,6 @@ class Config:
 
     def __init__(self):
         self.config = None
-        self.schema = None
 
     @staticmethod
     def get_default_config_file_name() -> list[str]:
@@ -123,9 +122,7 @@ class Config:
             )
 
         try:
-            schema = yamale.make_schema(
-                schema_filename
-            )  # Assuming self.schema_path holds the path to the YAML schema
+            schema = yamale.make_schema(schema_filename)
             yamale.validate(schema, tuple_list)
         except YamaleError as e:
             raise ValueError(
