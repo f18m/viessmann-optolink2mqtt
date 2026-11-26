@@ -80,9 +80,26 @@ class EnhancedMqttClient:
         return ""
 
     def connect(
-        self, mqtt_broker: str, mqtt_port: int, username: str, password: str | None
+        self,
+        mqtt_broker: str,
+        mqtt_port: int,
+        username: str | None,
+        password: str | None,
+        tls: bool = False,
+        ca_certs: str | None = None,
+        certfile: str | None = None,
+        keyfile: str | None = None,
     ) -> bool:
-        return self._mqtt_client.connect(mqtt_broker, mqtt_port, username, password)
+        return self._mqtt_client.connect(
+            mqtt_broker,
+            mqtt_port,
+            username,
+            password,
+            tls=tls,
+            ca_certs=ca_certs,
+            certfile=certfile,
+            keyfile=keyfile,
+        )
 
     def publish(self, topic: str, payload: str) -> None:
         self._mqtt_client.publish(topic, payload)

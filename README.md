@@ -103,7 +103,9 @@ docker run -d -v <your config file>:/etc/optolink2mqtt/optolink2mqtt.yaml \
     ghcr.io/f18m/optolink2mqtt:latest
 ```
 
-The broker username is configured in `mqtt.broker.username` in the YAML file. `MQTT_BROKER_PASSWORD` takes precedence over `MQTT_BROKER_PASSWORD_FILE`, and either environment variable overrides `mqtt.broker.password` in the YAML configuration. A trailing newline in the password file is ignored.
+The broker username is configured in `mqtt.broker.username` in the YAML file. `MQTT_BROKER_PASSWORD` takes precedence over `MQTT_BROKER_PASSWORD_FILE`, and either environment variable overrides `mqtt.broker.password` in the YAML configuration. A trailing newline in the password file is ignored. The password is only sent when `mqtt.broker.username` is set too.
+
+To connect over TLS, set `mqtt.broker.tls: true` (the default when `mqtt.broker.port` is 8883). The broker certificate is always verified, against the system CA store or the CA bundle in `mqtt.broker.ca_certs`; `mqtt.broker.certfile` and `mqtt.broker.keyfile` provide an optional client certificate. Without TLS, credentials are sent in plaintext.
 
 ### Docker Compose
 

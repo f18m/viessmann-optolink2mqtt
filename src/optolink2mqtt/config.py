@@ -145,6 +145,7 @@ class Config:
         self._fill_defaults_mqtt()
         self._fill_defaults_optolink()
         self._apply_mqtt_password_from_env()
+        self._check_mqtt_broker_security()
 
         # add default values for optional configuration parameters in registers_poll_list
         validated_registers = []
@@ -194,6 +195,12 @@ class Config:
             m["broker"]["username"] = None
         if "password" not in m["broker"]:
             m["broker"]["password"] = None
+        if "tls" not in m["broker"]:
+            # 8883 is the IANA port for MQTT over TLS
+            m["broker"]["tls"] = m["broker"]["port"] == 8883
+        for k in ["ca_certs", "certfile", "keyfile"]:
+            if k not in m["broker"]:
+                m["broker"][k] = None
 
         # other optional "mqtt" keys
         if "retain" not in m:
@@ -248,6 +255,33 @@ class Config:
             ) from e
 
         self.config["mqtt"]["broker"]["password"] = password
+
+    def _check_mqtt_broker_security(self):
+        b = self.config["mqtt"]["broker"]
+
+        if not b["tls"]:
+            tls_options = [k for k in ["ca_certs", "certfile", "keyfile"] if b[k]]
+            if tls_options:
+                raise ValueError(
+                    f"Invalid 'mqtt.broker' configuration: {tls_options} are set but 'tls' is false"
+                )
+        if b["keyfile"] and not b["certfile"]:
+            raise ValueError(
+                "Invalid 'mqtt.broker' configuration: 'keyfile' requires 'certfile'"
+            )
+
+        if b["password"] is not None and not b["username"]:
+            # the MQTT protocol does not allow a password without a username: paho
+            # would silently connect without credentials
+            logging.warning(
+                "An MQTT broker password is configured but 'mqtt.broker.username' is not: "
+                "the password will NOT be sent to the broker"
+            )
+        if b["password"] is not None and not b["tls"]:
+            logging.warning(
+                "MQTT broker credentials will be sent in plaintext since TLS is disabled; "
+                "set 'mqtt.broker.tls: true' if the broker supports it"
+            )
 
     def _fill_defaults_register(self, reg: dict) -> dict:
         # NOTE: "sampling_period_seconds" is mandatory in the schema, so it has no default

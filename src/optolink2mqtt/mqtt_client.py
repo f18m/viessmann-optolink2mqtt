@@ -130,28 +130,39 @@ class MqttClient:
         return
 
     def connect(
-        self, mqtt_broker: str, mqtt_port: int, username: str, password: Optional[str]
+        self,
+        mqtt_broker: str,
+        mqtt_port: int,
+        username: Optional[str],
+        password: Optional[str],
+        tls: bool = False,
+        ca_certs: Optional[str] = None,
+        certfile: Optional[str] = None,
+        keyfile: Optional[str] = None,
     ) -> bool:
         """
-        Connect to the MQTT broker
+        Connect to the MQTT broker.
+        When tls is True, the broker certificate is always verified, against ca_certs
+        or the system CA store if ca_certs is None; certfile/keyfile provide an
+        optional client certificate.
         """
         # Delays will be: 3, 6, 12, 24, 30, 30, ...
         # mqttc.reconnect_delay_set(delay=3, delay_max=30, exponential_backoff=True)
 
         self._mqttc.username_pw_set(username, password)
 
-        if mqtt_port == 8883:
+        if tls:
             assert paho.ssl
+            # NOTE: leaving tls_version unset makes paho use ssl.PROTOCOL_TLS_CLIENT,
+            # which also enables hostname verification
             self._mqttc.tls_set(
-                ca_certs=None,
-                certfile=None,
-                keyfile=None,
+                ca_certs=ca_certs,
+                certfile=certfile,
+                keyfile=keyfile,
                 cert_reqs=paho.ssl.CERT_REQUIRED,
-                tls_version=paho.ssl.PROTOCOL_TLS,
-                ciphers=None,
             )
         logging.info(
-            f"Connecting to MQTT broker '{mqtt_broker}:{mqtt_port}' with client_id={self.client_id}"
+            f"Connecting to MQTT broker '{mqtt_broker}:{mqtt_port}' with client_id={self.client_id}, TLS {'enabled' if tls else 'disabled'}"
         )
         rc = self._mqttc.connect(mqtt_broker, mqtt_port)
         logging.info(

@@ -141,6 +141,10 @@ def test_run_handles_reinitialization_exception_through_reconnect_path(monkeypat
                 "port": 1883,
                 "username": None,
                 "password": None,
+                "tls": False,
+                "ca_certs": None,
+                "certfile": None,
+                "keyfile": None,
             }
         }
     }
@@ -183,6 +187,10 @@ def test_run_handles_failed_connect_through_shared_optolink_handler(monkeypatch)
                 "port": 1883,
                 "username": None,
                 "password": None,
+                "tls": False,
+                "ca_certs": None,
+                "certfile": None,
+                "keyfile": None,
             }
         }
     }
@@ -232,6 +240,10 @@ def test_run_returns_initialization_error_code_after_reconnect_timeout():
                 "port": 1883,
                 "username": None,
                 "password": None,
+                "tls": False,
+                "ca_certs": None,
+                "certfile": None,
+                "keyfile": None,
             }
         }
     }
