@@ -154,12 +154,18 @@ class Config:
         self.config["registers_poll_list"] = validated_registers
 
         # additional coherency check:
-        # the same register address can be present only once:
-        reg_addresses = [r["register"] for r in self.config["registers_poll_list"]]
-        if len(reg_addresses) != len(set(reg_addresses)):
-            raise ValueError(
-                f"Configuration file '{filename}' is invalid: the same register address is present more than once in 'registers_poll_list'"
-            )
+        # the same register address can be present more than once only to extract
+        # different bytes of it, i.e. if all its entries have a byte_filter
+        regs_by_address = {}
+        for r in self.config["registers_poll_list"]:
+            regs_by_address.setdefault(r["register"], []).append(r)
+        for addr, regs in regs_by_address.items():
+            if len(regs) > 1 and any(r["byte_filter"] is None for r in regs):
+                raise ValueError(
+                    f"Configuration file '{filename}' is invalid: the register address 0x{addr:04X} is present "
+                    f"more than once in 'registers_poll_list' ({', '.join(r['name'] for r in regs)}); "
+                    "this is allowed only if every entry for that address has a 'byte_filter'"
+                )
 
         logging.info(
             f"Configuration file '{filename}' successfully loaded and validated against schema. It contains {len(self.config['registers_poll_list'])} registers to sample/poll."

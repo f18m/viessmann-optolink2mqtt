@@ -20,7 +20,7 @@ optolink:
 mqtt:
   broker: include('mqtt_broker')
   clientid: str(required=False)
-  qos: int(required=False)
+  qos: int(required=False, min=0, max=2)
   retain: bool(required=False)
   reconnect_period_sec: int(required=False)
   request_topic: str(required=False)
@@ -34,7 +34,7 @@ mqtt_ha_discovery:
 ---
 mqtt_broker:
   host: str()
-  port: int()
+  port: int(required=False, min=1, max=65535) # defaults to 1883
   username: str(required=False)
   password: str(required=False)
   tls: bool(required=False) # defaults to true when port is 8883, false otherwise
@@ -46,11 +46,11 @@ register_definition:
   name: str()
   sampling_period_seconds: int(min=1)
   register: int()
-  length: int()
+  length: int(min=1, max=250) # 250 is the largest data length of a VS2 telegram
   signed: bool(required=False) # defaults to false
   writable: bool(required=False) # defaults to false
   byte_filter: str(required=False) # defaults to no byte filter
-  enum: map(str,str,required=False)  # defaults to no enumeration
+  enum: map(str(), key=int(), required=False)  # integer raw value -> label; defaults to no enumeration
   scale_factor: num(min=0, required=False) # defaults to 1
   ha_discovery: include('register_ha_discovery',required=False) # no HomeAssistant discovery by default
 ---

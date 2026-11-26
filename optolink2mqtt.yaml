@@ -202,6 +202,8 @@ registers_poll_list:
   # but only 2 bytes are relevant for the actual value; in this case you can
   # use the "byte_filter" to specify which bytes should be considered when
   # extracting the value from the register raw data.
+  # The same register address can be listed more than once, to extract different
+  # bytes of it, as long as every entry for that address has a "byte_filter".
 
   - name: dhw_temperature_top
     sampling_period_seconds: 20
