@@ -77,6 +77,24 @@ pip install viessmann-optolink2mqtt
 optolink2mqtt --help
 ```
 
+#### Python compatibility
+
+The project aims to stay compatible with **Python 3.9**, to support **Debian 11 (bullseye) and its derivatives**, such as Raspberry Pi OS Legacy, which ship Python 3.9. The CI runs the unit tests on Python 3.9 (the oldest supported version), 3.11 and 3.15 (the latest release).
+
+For this reason, dependencies are pinned to the last versions that still support Python 3.9. For example, `platformdirs` stays at 4.4.0, since later releases require Python 3.10 or 3.11.
+
+On Debian 11, the `venv` module is in a separate package. Debian 11's pip (20.3) is old, so upgrade it inside the virtual environment before installing:
+
+```sh
+sudo apt install python3-venv
+python3 -m venv optolink2mqtt-venv
+source optolink2mqtt-venv/bin/activate
+pip install --upgrade pip
+pip install viessmann-optolink2mqtt
+```
+
+The Docker image ships its own Python, so it doesn't depend on the Python version of the host.
+
 ### Docker
 
 When using Docker, provide the YAML config path and the serial port name in the command line. For example, `/dev/ttyUSB0`:
