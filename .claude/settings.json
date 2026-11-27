@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(actionlint)",
+      "Bash(actionlint *)",
+      "Bash(black --check *)",
+      "Bash(docker info)",
+      "Bash(make *)",
+      "Bash(make)"
+    ]
+  }
+}
