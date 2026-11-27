@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
 ]
 dynamic = ["dependencies", "version"]
@@ -23,7 +23,7 @@ dependencies = {file = ["requirements.txt"]}
 "Bug Tracker" = "https://github.com/f18m/viessmann-optolink2mqtt/issues"
 
 [project.scripts]
-optolink2mqtt = "optolink2mqtt:main.main"
+optolink2mqtt = "optolink2mqtt.main:main"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs", "hatch-requirements-txt"]
