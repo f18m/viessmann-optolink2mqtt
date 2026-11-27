@@ -22,7 +22,7 @@ def load(tmp_path, mqtt_extra="", broker="    port: 1883\n", registers=None):
     length: 2
 """
     text = (
-        "optolink:\n  serial_port: /dev/null\n"
+        "config_version: 2\noptolink:\n  serial_port: /dev/null\n"
         "mqtt:\n  broker:\n    host: localhost\n"
         + broker
         + mqtt_extra
@@ -77,6 +77,7 @@ ENUM_REGISTER = """
     sampling_period_seconds: 10
     register: 0xB000
     length: 1
+    type: enum
     enum:
 {entries}
 """

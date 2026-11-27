@@ -48,6 +48,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
         # Should not raise exception
@@ -80,6 +81,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -111,6 +113,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
 
@@ -144,6 +147,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
 
@@ -177,6 +181,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
 
@@ -210,6 +215,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
 
@@ -229,6 +235,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -262,6 +269,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -294,6 +302,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "length": 2,
             "signed": False,
             "writable": False,
+            "type": "float",
             "scale_factor": 0.1,
             "byte_filter": None,
             "enum": None,
@@ -342,6 +351,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -386,6 +396,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": enum_dict,
+            "type": "enum",
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -430,6 +441,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -468,6 +480,7 @@ class TestOptolinkVS2RegisterHomeAssistant:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": ha_discovery,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")

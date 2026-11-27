@@ -7,7 +7,7 @@
 # one version, and refuses to start with any other. Files without it are version 1.
 # To convert a file written for an older version, use the upgrade tool at
 # https://f18m.github.io/viessmann-optolink2mqtt/config-upgrade/
-config_version: 1
+config_version: 2
 
 logging:
   # logging.level: defines the logging level; it can be one of the following:
@@ -37,6 +37,11 @@ optolink:
   reconnect_timeout_sec: 600
   # Re-initialize the VS2 protocol after this many consecutive read/write failures (e.g. after a heat pump power cycle)
   max_consecutive_failures_before_reinit: 3
+  # Timezone of the Viessmann device clock, as an IANA name (e.g. "Europe/Berlin").
+  # It is used only by registers of type "datetime_bcd", since the device stores local date/times
+  # without timezone. Defaults to the timezone of the host running optolink2mqtt; set it explicitly
+  # when running in Docker, where the host timezone is usually UTC.
+  #timezone: "Europe/Berlin"
 
 mqtt:
   # broker: details about the MQTT broker
@@ -105,10 +110,16 @@ registers_poll_list:
     sampling_period_seconds: 10
 
     # each register of the Viessmann device has a few key attributes you need to know/discover:
-    # the address, its length (in bytes), its scale factor, whether the number contained is signed or not,
-    # and if the register is writable or read-only.
+    # the address, its length (in bytes), its type, its scale factor, whether the number contained is
+    # signed or not, and if the register is writable or read-only.
     register: 0x0101
     length: 2
+    # type: how the register bytes are decoded; it can be:
+    #  - int: a little-endian integer (this is the default)
+    #  - float: a little-endian integer multiplied by "scale_factor"; a scale factor is allowed only for this type
+    #  - enum: a little-endian integer mapped to a label through the "enum" dictionary
+    #  - datetime_bcd: the 8-byte Viessmann DateTimeBCD format, published as an ISO 8601 date/time
+    type: float
     scale_factor: 0.1
     signed: false
     writable: false
@@ -128,6 +139,7 @@ registers_poll_list:
     sampling_period_seconds: 600
     register: 0x1670
     length: 4
+    type: float
     scale_factor: 0.1
     signed: false
     writable: false
@@ -144,7 +156,7 @@ registers_poll_list:
     sampling_period_seconds: 20
     register: 0xB000
     length: 1
-    scale_factor: 1
+    type: enum
     signed: false
     # IMPORTANT: when a register is flagged as "writable: true", optolink2mqtt will
     # subscribe to the specific MQTT topic '<mqtt.publish_topic_prefix>/<register.name>/set'
@@ -171,6 +183,7 @@ registers_poll_list:
     sampling_period_seconds: 600
     register: 0x6000
     length: 2
+    type: float
     scale_factor: 0.1
     writable: true
     ha_discovery:
@@ -192,7 +205,7 @@ registers_poll_list:
     sampling_period_seconds: 20
     register: 0x0484
     length: 1
-    scale_factor: 1
+    type: int
     signed: false
     writable: false
     ha_discovery:
@@ -215,6 +228,7 @@ registers_poll_list:
     sampling_period_seconds: 20
     register: 0x01CD
     length: 3
+    type: float
     scale_factor: 0.1
     byte_filter: "b:0:1"  # of the 3 bytes, consider only the first two bytes; then apply the scale factor
     signed: true
@@ -224,6 +238,25 @@ registers_poll_list:
       platform: sensor
       device_class: temperature
       unit_of_measurement: "°C"
+
+
+  # another register example, showing a writable date/time (type "datetime_bcd"):
+  # optolink2mqtt publishes it as an ISO 8601 date/time with the UTC offset of "optolink.timezone",
+  # e.g. "2026-12-24T00:00:00+01:00", or "None" if the date/time is not set on the device.
+  # Writing an ISO 8601 date/time sets it; writing "None" (or any date before year 2000) clears it.
+  # The HomeAssistant "datetime" platform requires HomeAssistant 2026.5 or later; for a read-only
+  # date/time use the "sensor" platform with "device_class: timestamp".
+
+  - name: holiday_program_start
+    sampling_period_seconds: 600
+    register: 0x2309
+    length: 8
+    type: datetime_bcd
+    writable: true
+    ha_discovery:
+      name: "Holiday Program Start"
+      platform: datetime
+      entity_category: config
 
 
   # PLEASE NOTE THAT DISCOVERING THE CORRECT REGISTERS TO POLL IS

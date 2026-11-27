@@ -24,6 +24,9 @@ RUN python -m build --wheel --outdir /build/wheel
 
 FROM python:3.14-alpine
 
+# timezone database, needed by the 'optolink.timezone' setting (zoneinfo)
+RUN apk add --no-cache tzdata
+
 ARG USERNAME=optolink2mqtt
 LABEL org.opencontainers.image.source=https://github.com/f18m/optolink2mqtt
 

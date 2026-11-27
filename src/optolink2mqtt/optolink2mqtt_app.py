@@ -33,6 +33,7 @@ import serial
 
 from .cli import parse_args
 from .config import Config
+from .datetime_bcd import parse_timezone
 from .enhanced_mqtt_client import EnhancedMqttClient
 from .optolink_interface import (
     OptolinkConnectionFailed,
@@ -270,6 +271,7 @@ class Optolink2MqttApp:
                 register_instance = OptolinkVS2Register(
                     reg,
                     self.config.config["mqtt"]["publish_topic_prefix"],
+                    parse_timezone(self.config.config["optolink"]["timezone"]),
                 )
             except ValueError as e:
                 logging.error(f"Cannot parse register definition #{i}: {e}. Aborting.")

@@ -35,6 +35,11 @@ def make_register(length=1, signed=False, scale_factor=1.0, enum=None):
             "scale_factor": scale_factor,
             "byte_filter": None,
             "enum": enum,
+            "type": (
+                "enum"
+                if enum is not None
+                else ("float" if scale_factor != 1.0 else "int")
+            ),
             "ha_discovery": None,
         },
         "optolink2mqtt/test",

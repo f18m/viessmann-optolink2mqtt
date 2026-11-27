@@ -12,6 +12,7 @@ from optolink2mqtt.config import Config  # noqa: E402
 SCHEMA = os.path.realpath(SRC_DIR + "/optolink2mqtt/schema/optolink2mqtt.schema.yaml")
 
 CONFIG_TEMPLATE = """
+config_version: 2
 optolink:
   serial_port: /dev/null
 mqtt:

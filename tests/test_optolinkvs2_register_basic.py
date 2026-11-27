@@ -36,6 +36,7 @@ class TestOptolinkVS2RegisterInit:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -70,6 +71,7 @@ class TestOptolinkVS2RegisterInit:
                 "scale_factor": 1.0,
                 "byte_filter": None,
                 "enum": None,
+                "type": "int",
                 "ha_discovery": None,
             }
             reg = OptolinkVS2Register(reg_data, "home/device")
@@ -87,6 +89,7 @@ class TestOptolinkVS2RegisterInit:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
 
@@ -107,6 +110,7 @@ class TestOptolinkVS2RegisterInit:
             "length": "4",  # string instead of int
             "signed": 1,  # truthy value
             "writable": 0,  # falsy value
+            "type": "float",
             "scale_factor": "2.5",  # string instead of float
             "byte_filter": None,
             "enum": None,
@@ -141,6 +145,7 @@ class TestOptolinkVS2RegisterMQTT:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/heater")
@@ -160,6 +165,7 @@ class TestOptolinkVS2RegisterMQTT:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/heater")
@@ -179,6 +185,7 @@ class TestOptolinkVS2RegisterMQTT:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device/")
@@ -201,6 +208,7 @@ class TestOptolinkVS2RegisterEdgeCases:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -220,6 +228,7 @@ class TestOptolinkVS2RegisterEdgeCases:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -240,6 +249,7 @@ class TestOptolinkVS2RegisterEdgeCases:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -255,6 +265,7 @@ class TestOptolinkVS2RegisterEdgeCases:
             "length": 2,
             "signed": False,
             "writable": False,
+            "type": "float",
             "scale_factor": 100.0,
             "byte_filter": None,
             "enum": None,
@@ -279,6 +290,7 @@ class TestOptolinkVS2RegisterEdgeCases:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")

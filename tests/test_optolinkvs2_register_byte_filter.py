@@ -22,6 +22,7 @@ def make_register(byte_filter, length=3):
             "scale_factor": 1.0,
             "byte_filter": byte_filter,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         },
         "prefix/",
