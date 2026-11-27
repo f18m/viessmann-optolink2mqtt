@@ -141,6 +141,22 @@ If you prefer Docker Compose, use the provided [docker-compose.yml](./docker-com
 
 This software accepts declarative configuration in YAML format. Use [optolink2mqtt.yaml](./optolink2mqtt.yaml) as the reference for the supported syntax and configuration structure.
 
+### Register types
+
+The `type` attribute of each register in `registers_poll_list` says how its bytes are decoded:
+
+| `type` | Bytes | Published value |
+|---|---|---|
+| `int` (default) | little-endian integer, `signed` or not | integer, e.g. `42` |
+| `float` | little-endian integer multiplied by `scale_factor` | number, e.g. `21.5` |
+| `enum` | little-endian integer mapped to a label by the `enum` dictionary | label, e.g. `DHW only` |
+| `datetime_bcd` | the 8-byte Viessmann DateTimeBCD format | ISO 8601 date/time, e.g. `2026-12-24T00:00:00+01:00` |
+
+A `scale_factor` other than 1 requires `type: float`, and an `enum` dictionary requires `type: enum`. Configuration files written for older versions must add the `type` to these registers.
+
+A `datetime_bcd` register is published as an ISO 8601 date/time, or as `None` when the date/time is not set on the device (Viessmann stores 1970-01-01 for that). The device clock has no timezone: set `optolink.timezone` to its IANA timezone, e.g. `Europe/Berlin`, otherwise the timezone of the host is used. Writing an ISO 8601 date/time sets the register, converting it to the device timezone if it carries a timezone; writing `None` clears it.
+In Home Assistant, use the `datetime` platform for a writable register (Home Assistant 2026.5 or later), or the `sensor` platform with `device_class: timestamp` for a read-only one.
+
 ## How to discover register addresses
 
 Please check my translation of the [Viessmann register mappings](https://github.com/f18m/viessmann-parameters-english) to get a good starting point.

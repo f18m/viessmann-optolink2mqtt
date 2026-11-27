@@ -77,6 +77,7 @@ ENUM_REGISTER = """
     sampling_period_seconds: 10
     register: 0xB000
     length: 1
+    type: enum
     enum:
 {entries}
 """

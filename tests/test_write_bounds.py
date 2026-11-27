@@ -32,6 +32,7 @@ def make_register(min_val=20, max_val=60, scale_factor=0.1, signed=False):
             "length": 2,
             "signed": signed,
             "writable": True,
+            "type": "float" if scale_factor != 1.0 else "int",
             "scale_factor": scale_factor,
             "byte_filter": None,
             "enum": None,

@@ -48,7 +48,8 @@ containers.
 | `src/optolink2mqtt/read_register.py` | The `read-register` mode: reads one register once and prints a report, for reverse-engineering. |
 | `src/optolink2mqtt/optolink_interface.py` | `OptolinkInterface`: owns the serial port and the protocol instance; connect, reconnect policy, register read/write, failure counting. |
 | `src/optolink2mqtt/optolinkvs2_protocol.py` | `OptolinkVS2Protocol`: VS2 handshake, telegram encoding, CRC, response parsing/validation, per-`ErrorCode` statistics. No knowledge of registers or MQTT. |
-| `src/optolink2mqtt/optolinkvs2_register.py` | `OptolinkVS2Register`: register **metadata** (address, length, signed, scale, byte filter, enum, HA discovery) and raw bytes <-> value conversion. Stores no value. |
+| `src/optolink2mqtt/optolinkvs2_register.py` | `OptolinkVS2Register`: register **metadata** (address, length, type, signed, scale, byte filter, enum, HA discovery) and raw bytes <-> value conversion. Stores no value. |
+| `src/optolink2mqtt/datetime_bcd.py` | Codec of the 8-byte Viessmann DateTimeBCD format, and IANA timezone lookup for `optolink.timezone`. |
 | `src/optolink2mqtt/mqtt_client.py` | `MqttClient`: thin wrapper over `paho.mqtt.client` (connection, last will, callbacks, counters). |
 | `src/optolink2mqtt/enhanced_mqtt_client.py` | `EnhancedMqttClient`: `MqttClient` plus Home Assistant discovery and optolink2mqtt status/metrics topics. |
 | `src/optolink2mqtt/config.py` | `Config`: finds, loads and validates the YAML config, then fills every optional key with its default. |
@@ -111,9 +112,17 @@ MQTT broker ───────────────────> MqttClien
 
 ### Registers and MQTT topics
 
-- Values are little-endian integers, optionally `signed`, multiplied by `scale_factor` and rounded to
-  2 decimals. `byte_filter` (`"b:<start>:<end>"`, both inclusive) decodes a slice of the register;
-  `enum` maps raw integers to labels (and back, for writes).
+- The register `type` alone decides how bytes are decoded; `ha_discovery` only shapes what Home Assistant
+  sees, never the decoding. Types:
+  - `int` (default): little-endian integer, optionally `signed`;
+  - `float`: the same integer multiplied by `scale_factor` (allowed only for this type) and rounded to
+    2 decimals;
+  - `enum`: the integer mapped to a label by the `enum` dictionary (and back, for writes);
+  - `datetime_bcd`: 8 BCD bytes `CC YY MM DD WW hh mm ss` (weekday 0=Monday) in device local time,
+    published as ISO 8601 with the UTC offset of `optolink.timezone` (host timezone by default), or
+    `None` for the "not set" value 1970-01-01.
+
+  `byte_filter` (`"b:<start>:<end>"`, both inclusive) decodes a slice of an `int` or `float` register.
 - Topics: state `<publish_topic_prefix>/<sanitized name>`, command `<publish_topic_prefix>/<sanitized name>/set`
   (subscribed only for `writable` registers). Names are sanitized to `[a-z0-9_]`; two registers
   mapping to the same topic are rejected at startup.

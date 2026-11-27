@@ -29,6 +29,7 @@ from typing import List, Tuple
 
 import serial
 
+from . import datetime_bcd
 from .config import Config
 from .optolink_interface import OptolinkConnectionFailed, OptolinkInterface
 from .optolinkvs2_protocol import OptolinkVS2RxData
@@ -144,6 +145,7 @@ def build_register(args: argparse.Namespace) -> OptolinkVS2Register:
             "length": args.length,
             "signed": args.signed,
             "writable": False,
+            "type": "float" if args.scale_factor != 1.0 else "int",
             "scale_factor": args.scale_factor,
             "byte_filter": args.byte_filter,
             "enum": None,
@@ -211,6 +213,21 @@ def _interpretations(data: bytes) -> List[Tuple[str, str]]:
         )
     ascii_text = "".join(chr(b) if 0x20 <= b < 0x7F else "." for b in data)
     rows.append(("ASCII", f"'{ascii_text}'"))
+    if len(data) == datetime_bcd.DATETIME_BCD_LENGTH:
+        try:
+            dt = datetime_bcd.decode(data)
+            rows.append(
+                (
+                    "DateTimeBCD",
+                    (
+                        "not set"
+                        if dt is None
+                        else f"{dt.isoformat()} (device local time)"
+                    ),
+                )
+            )
+        except ValueError:
+            pass  # not a DateTimeBCD value
     return rows
 
 
@@ -221,6 +238,7 @@ def format_register_details(
         "Register",
         f"  address:             0x{reg.address:04X} ({reg.address})",
         f"  length:              {reg.length} byte(s)",
+        f"  type:                {reg.type}",
         f"  signed:              {reg.signed}",
         f"  scale factor:        {_fmt_number(reg.scale_factor)}",
         f"  byte filter:         {reg.byte_filter or 'none'}",
@@ -259,9 +277,11 @@ def format_register_details(
         "    sampling_period_seconds: 60",
         f"    register: 0x{reg.address:04X}",
         f"    length: {reg.length}",
+        f"    type: {reg.type}",
         f"    signed: {str(reg.signed).lower()}",
-        f"    scale_factor: {_fmt_number(reg.scale_factor)}",
     ]
+    if reg.scale_factor != 1.0:
+        lines.append(f"    scale_factor: {_fmt_number(reg.scale_factor)}")
     if reg.byte_filter:
         lines.append(f'    byte_filter: "{reg.byte_filter}"')
     return "\n".join(lines)

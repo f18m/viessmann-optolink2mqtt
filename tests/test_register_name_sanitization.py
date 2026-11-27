@@ -23,6 +23,7 @@ def make_register_def(name: str, address: int = 0x1000) -> dict:
         "scale_factor": 1.0,
         "byte_filter": None,
         "enum": None,
+        "type": "int",
         "ha_discovery": None,
     }
 
@@ -77,6 +78,7 @@ def run_setup(monkeypatch, register_defs):
             "reconnect_period_sec": 1,
             "reconnect_timeout_sec": 1,
             "max_consecutive_failures_before_reinit": 3,
+            "timezone": None,
         },
         "logging": {"report_status_period_sec": 0},
         "registers_poll_list": register_defs,

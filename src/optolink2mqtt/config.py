@@ -25,6 +25,7 @@ from yamale import YamaleError
 from platformdirs import PlatformDirs
 import socket
 
+from .datetime_bcd import parse_timezone
 from .ha_units import HA_MEASUREMENT_UNITS
 from .ha_support import (
     HA_SUPPORTED_DEVICE_CLASSES,
@@ -178,6 +179,16 @@ class Config:
             m["reconnect_timeout_sec"] = 600
         if "max_consecutive_failures_before_reinit" not in m:
             m["max_consecutive_failures_before_reinit"] = 3
+        if "timezone" not in m:
+            # None means: the device clock uses the host timezone
+            m["timezone"] = None
+        else:
+            try:
+                parse_timezone(m["timezone"])
+            except ValueError as e:
+                raise ValueError(
+                    f"Invalid 'optolink.timezone' attribute in configuration file: {e}"
+                )
 
     def _fill_defaults_logging(self):
         # logging
@@ -305,6 +316,8 @@ class Config:
             reg["byte_filter"] = None
         if "enum" not in reg:
             reg["enum"] = None
+        if "type" not in reg:
+            reg["type"] = "int"
 
         if "ha_discovery" not in reg:
             # HA discovery disabled for this task:
@@ -352,8 +365,10 @@ class Config:
                 # We just make sure to never add "state_class" to some types of "device_class"es that will
                 # trigger errors on the HomeAssistant side, and to platforms other than "sensor",
                 # since "state_class" is a sensor-only attribute in HomeAssistant.
+                # Only numeric registers can be measurements.
                 if (
                     h["platform"] == "sensor"
+                    and reg["type"] in ("int", "float")
                     and h["device_class"]
                     not in HA_UNSUPPORTED_DEVICE_CLASSES_FOR_MEASUREMENTS
                 ):

@@ -23,6 +23,7 @@ def make_register_def(writable: bool, platform: str) -> dict:
         "scale_factor": 1.0,
         "byte_filter": None,
         "enum": None,
+        "type": "int",
         "ha_discovery": {"name": "Test", "platform": platform},
     }
 
@@ -45,6 +46,7 @@ def test_setup_exits_cleanly_on_invalid_ha_discovery(monkeypatch):
             "reconnect_period_sec": 1,
             "reconnect_timeout_sec": 1,
             "max_consecutive_failures_before_reinit": 3,
+            "timezone": None,
         },
         "registers_poll_list": [make_register_def(True, "sensor")],
     }

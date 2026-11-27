@@ -32,6 +32,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -53,6 +54,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -71,6 +73,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "length": 2,
             "signed": False,
             "writable": False,
+            "type": "float",
             "scale_factor": 0.1,
             "byte_filter": None,
             "enum": None,
@@ -95,6 +98,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": "b:1:2",  # Use bytes 1-2 (inclusive)
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -119,6 +123,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": enum_dict,
+            "type": "enum",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -140,6 +145,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": enum_dict,
+            "type": "enum",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -159,6 +165,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -178,6 +185,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -194,6 +202,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "length": 2,
             "signed": False,
             "writable": True,
+            "type": "float",
             "scale_factor": 0.1,
             "byte_filter": None,
             "enum": None,
@@ -218,6 +227,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": enum_dict,
+            "type": "enum",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -239,6 +249,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": enum_dict,
+            "type": "enum",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
@@ -258,6 +269,7 @@ class TestOptolinkVS2RegisterValueConversion:
             "scale_factor": 1.0,
             "byte_filter": None,
             "enum": None,
+            "type": "int",
             "ha_discovery": None,
         }
         reg = OptolinkVS2Register(reg_data, "home/device")
