@@ -19,7 +19,6 @@ limitations under the License.
 
 import argparse
 import logging
-import os
 import queue
 import sched
 import signal
@@ -27,10 +26,12 @@ import socket
 import termios
 import threading
 import time
+from typing import Optional
 
 import paho.mqtt.client as paho  # pip install paho-mqtt
 import serial
 
+from .cli import parse_args
 from .config import Config
 from .enhanced_mqtt_client import EnhancedMqttClient
 from .optolink_interface import (
@@ -201,36 +202,18 @@ class Optolink2MqttApp:
         """
         return self._stop_event.wait(delay_sec)
 
-    def setup(self) -> int:
+    def setup(self, args: Optional[argparse.Namespace] = None) -> int:
         """
-        Application setup.
+        Application setup, for the "run" mode.
+        args are the parsed command line arguments; when None, sys.argv is parsed.
         Returns 0 on success, -1 when the process must exit successfully right away
         (e.g. --version), or a positive exit code on failure:
         2 = the config file cannot be loaded, 3 = no registers to poll,
         4 = invalid register definition.
         """
 
-        # CLI interface
-        parser = argparse.ArgumentParser(
-            prog="optolink2mqtt",
-            description="Open source interface between a Viessmann device (heat pump, gas heater, etc) and MQTT",
-            epilog="The configuration file is mandatory and it is searched in the following locations (in order):\n"
-            + "  * the location pointed by the 'OPTOLINK2MQTT_CONFIG' environment variable\n  * "
-            + "\n  * ".join(Config.get_default_config_file_name())
-            + "\nSee documentation at https://github.com/f18m/optolink2mqtt for configuration examples and the config reference guide.\n",
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-        )
-        parser.add_argument(
-            "-V",
-            "--version",
-            help="Print version and exit",
-            action="store_true",
-            default=False,
-        )
-
-        if "COLUMNS" not in os.environ:
-            os.environ["COLUMNS"] = "120"  # avoid too many line wraps
-        args = parser.parse_args()
+        if args is None:
+            args = parse_args()
         if args.version:
             print(f"Version: {Optolink2MqttApp.get_embedded_version()}")
             return -1

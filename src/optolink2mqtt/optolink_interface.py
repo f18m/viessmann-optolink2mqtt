@@ -23,7 +23,7 @@ from typing import Optional
 
 import serial
 
-from .optolinkvs2_protocol import OptolinkVS2Protocol
+from .optolinkvs2_protocol import OptolinkVS2Protocol, OptolinkVS2RxData
 from .optolinkvs2_register import OptolinkVS2Register
 
 
@@ -108,6 +108,12 @@ class OptolinkInterface:
         self.consecutive_failures = 0
         return True
 
+    def disconnect(self) -> None:
+        """
+        Closes the serial port, if open, releasing its exclusive lock.
+        """
+        self._discard_protocol()
+
     def _discard_protocol(self) -> None:
         if self.protocol is not None:
             self._previous_protocol_errors += self.protocol.get_total_errors()
@@ -182,9 +188,10 @@ class OptolinkInterface:
                 f"{self.consecutive_failures} consecutive Optolink failures"
             )
 
-    def sample_register(self, reg: OptolinkVS2Register):
+    def read_register_rawdata(self, reg: OptolinkVS2Register) -> OptolinkVS2RxData:
         """
-        Reads a register from the device and returns its value, or None on failure.
+        Reads a register from the device and returns the received telegram,
+        successful or not, with its raw (undecoded) data.
         """
 
         rx_data = self.protocol.read_datapoint_ext(reg.address, reg.length)
@@ -194,9 +201,17 @@ class OptolinkInterface:
             logging.error(
                 f"Failed to read register '{reg.name}' (addr=0x{reg.address:04x}): error code {int(rx_data.receive_code)} ({rx_data.receive_code.name})"
             )
-            self._track_result(rx_data)
-            return None
+        return rx_data
+
+    def sample_register(self, reg: OptolinkVS2Register):
+        """
+        Reads a register from the device and returns its value, or None on failure.
+        """
+
+        rx_data = self.read_register_rawdata(reg)
         self._track_result(rx_data)
+        if not rx_data.is_successful():
+            return None
         return reg.get_value_from_rawdata(rx_data.data)
 
     def write_register(self, reg: OptolinkVS2Register, raw_data: bytes) -> bool:

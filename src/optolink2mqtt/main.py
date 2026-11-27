@@ -20,12 +20,24 @@ limitations under the License.
 """
 
 import sys
+
+from .cli import MODE_READ_REGISTER, parse_args
 from .optolink2mqtt_app import Optolink2MqttApp
+from .read_register import run_read_register
 
 
 def main() -> None:
+    args = parse_args()
+    if args.version:
+        print(f"Version: {Optolink2MqttApp.get_embedded_version()}")
+        sys.exit(0)
+
+    if args.mode == MODE_READ_REGISTER:
+        sys.exit(run_read_register(args))
+
+    # "run" mode
     app = Optolink2MqttApp()
-    ret = app.setup()
+    ret = app.setup(args)
     if ret > 0:
         sys.exit(ret)
     if ret == -1:  # version has been requested (and already printed)
