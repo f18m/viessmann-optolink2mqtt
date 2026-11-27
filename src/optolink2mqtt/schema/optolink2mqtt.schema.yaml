@@ -1,5 +1,6 @@
 # Schema for the YAML config file written using Yamala syntax
 
+config_version: int(required=False, min=1) # defaults to 1; see Config.CONFIG_VERSION
 logging: include('logging',required=False)
 optolink: include('optolink',required=True)
 mqtt: include('mqtt',required=True)

@@ -15,6 +15,7 @@ sys.path.append(SRC_DIR)
 from optolink2mqtt.optolink2mqtt_app import Optolink2MqttApp  # noqa: E402
 
 CONFIG_HEADER = """
+config_version: 2
 optolink:
   serial_port: /dev/ttyUSB0
 mqtt:

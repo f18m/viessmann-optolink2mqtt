@@ -157,6 +157,12 @@ A `scale_factor` other than 1 requires `type: float`, and an `enum` dictionary r
 A `datetime_bcd` register is published as an ISO 8601 date/time, or as `None` when the date/time is not set on the device (Viessmann stores 1970-01-01 for that). The device clock has no timezone: set `optolink.timezone` to its IANA timezone, e.g. `Europe/Berlin`, otherwise the timezone of the host is used. Writing an ISO 8601 date/time sets the register, converting it to the device timezone if it carries a timezone; writing `None` clears it.
 In Home Assistant, use the `datetime` platform for a writable register (Home Assistant 2026.5 or later), or the `sensor` platform with `device_class: timestamp` for a read-only one.
 
+### Configuration version
+
+The top-level `config_version` key says which version of the configuration format a file is written for. Each optolink2mqtt release accepts exactly one version and refuses to start (exit code 2) with any other, explaining why. Files without `config_version` are version 1.
+
+When a release bumps the version, convert your file with the [configuration upgrade tool](https://f18m.github.io/viessmann-optolink2mqtt/config-upgrade/): paste the current file and copy the converted one, with the changes highlighted. It runs entirely in your browser.
+
 ## How to discover register addresses
 
 Please check my translation of the [Viessmann register mappings](https://github.com/f18m/viessmann-parameters-english) to get a good starting point.

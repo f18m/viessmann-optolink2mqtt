@@ -14,6 +14,7 @@ from optolink2mqtt.optolinkvs2_register import OptolinkVS2Register  # noqa: E402
 SCHEMA = os.path.realpath(SRC_DIR + "/optolink2mqtt/schema/optolink2mqtt.schema.yaml")
 
 CONFIG = """
+config_version: 2
 optolink:
   serial_port: /dev/null
 mqtt:

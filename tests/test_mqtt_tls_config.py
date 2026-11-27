@@ -21,6 +21,7 @@ from optolink2mqtt.config import Config  # noqa: E402
 from optolink2mqtt.mqtt_client import MqttClient  # noqa: E402
 
 CONFIG_TEMPLATE = """
+config_version: 2
 optolink:
   serial_port: /dev/ttyUSB0
 mqtt:

@@ -322,7 +322,7 @@ DATETIME_REGISTER = """
 
 def load(tmp_path, registers=DATETIME_REGISTER, optolink_extra=""):
     text = (
-        "optolink:\n  serial_port: /dev/null\n"
+        "config_version: 2\noptolink:\n  serial_port: /dev/null\n"
         + optolink_extra
         + "mqtt:\n  broker:\n    host: localhost\n"
         + "registers_poll_list:"

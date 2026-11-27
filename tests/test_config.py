@@ -8,6 +8,7 @@ SRC_DIR = os.path.realpath(THIS_SCRIPT_DIR + "/../src")
 sys.path.append(SRC_DIR)
 
 MINIMAL_CONFIG = """
+config_version: 2
 optolink:
   serial_port: /dev/ttyUSB0
 mqtt:
