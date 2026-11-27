@@ -94,6 +94,8 @@ docker logs -f optolink2mqtt
 
 The `--restart=unless-stopped` option ensures the container is restarted after a system reboot.
 
+The container runs as an unprivileged user that belongs to the `dialout` group (gid 20), which owns serial devices on Debian, Ubuntu and Raspberry Pi OS. If the serial device on your host belongs to another group (check with `ls -ln /dev/ttyUSB0`), add `--group-add <gid of that group>` to the `docker run` command.
+
 The Docker image supports three architectures: `amd64`, `armv7`, and `arm64`.
 
 If your MQTT broker requires authentication, set `MQTT_BROKER_PASSWORD` to provide the password as an environment variable. Alternatively, mount a Docker secret file and set `MQTT_BROKER_PASSWORD_FILE` to the file path:

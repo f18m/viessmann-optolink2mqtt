@@ -38,7 +38,7 @@ COPY src/optolink2mqtt/*.py ./src/
 # copy the version file produced by hatch-vcs plugin from the builder stage:
 COPY --from=builder /build/src/optolink2mqtt/_optolink2mqtt_version.py ./src/
 
-RUN mkdir ./conf ./schema
+RUN mkdir ./schema
 COPY src/optolink2mqtt/schema/* ./schema/
 
 # do not copy the default configuration file: it's better to error out loudly
@@ -47,10 +47,13 @@ COPY src/optolink2mqtt/schema/* ./schema/
 # will need to configure
 RUN mkdir /etc/optolink2mqtt/
 
-# add user optolink2mqtt to image
-RUN if [[ "$USERNAME" != "root" ]]; then \
+# add user optolink2mqtt to image; it joins the "dialout" group (gid 20, like on
+# Debian/Raspberry Pi OS hosts) so it can open serial devices passed with --device,
+# which keep the host's root:dialout ownership and 0660 mode
+RUN if [ "$USERNAME" != "root" ]; then \
     addgroup -S optolink2mqtt && \
     adduser -S ${USERNAME} -G optolink2mqtt && \
+    addgroup ${USERNAME} dialout && \
     chown -R ${USERNAME}:optolink2mqtt /opt/optolink2mqtt ; \
     fi
 

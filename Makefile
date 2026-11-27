@@ -60,7 +60,7 @@ CFGFILE:=$(shell pwd)/optolink2mqtt.yaml
 endif
 
 docker-run:
-	docker run -v $(CFGFILE):/opt/optolink2mqtt/conf/optolink2mqtt.yaml \
+	docker run -v $(CFGFILE):/etc/optolink2mqtt/optolink2mqtt.yaml \
 		--hostname $(shell hostname) \
 		--network=host \
 		optolink2mqtt:latest $(ARGS)
