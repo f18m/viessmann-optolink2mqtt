@@ -71,4 +71,4 @@ ENV PYTHONPATH="/opt/optolink2mqtt/src:/opt/optolink2mqtt/deps"
 # it's important to use python -m to run the module, otherwise the relative imports
 # will not work. Remember that the docker image does not contain the actual optolink2mqtt
 # wheel installed (this is to make it possible to remove "pip" from the base image in future)
-CMD ["python", "-m", "src.main"]
+CMD ["python", "-m", "src.main", "run"]

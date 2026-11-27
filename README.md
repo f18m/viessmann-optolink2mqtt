@@ -127,6 +127,51 @@ This software accepts declarative configuration in YAML format. Use [optolink2mq
 
 Please check my translation of the [Viessmann register mappings](https://github.com/f18m/viessmann-parameters-english) to get a good starting point.
 
+### Reading a single register with `read-register`
+
+`optolink2mqtt` has two modes:
+
+- `optolink2mqtt run` polls the registers in the configuration file and bridges them to MQTT. It is the default mode, used when no mode is given.
+- `optolink2mqtt read-register <address> <length> [signed] [scale_factor] [byte_filter]` reads one register once, prints everything about it on stdout, and exits. No MQTT broker is needed.
+
+Use `read-register` to try out a register before adding it to `registers_poll_list`. The arguments match the register keys of the configuration file:
+
+| Argument | Meaning | Default |
+|---|---|---|
+| `address` | register address, hexadecimal (`0x0800`) or decimal | (required) |
+| `length` | number of bytes to read | (required) |
+| `signed` | `signed`/`true` or `unsigned`/`false` | `unsigned` |
+| `scale_factor` | factor the decoded integer is multiplied by, e.g. `0.1` | `1.0` |
+| `byte_filter` | decode only bytes `b:<start>:<end>` (both inclusive) | none |
+
+The serial port is read from the configuration file. To skip the configuration file, pass `--serial-port /dev/ttyUSB0`. Add `--show-received-bytes` to log the raw serial traffic.
+
+For example, to read the 2-byte signed outdoor temperature at `0x0800`, scaled by 0.1:
+
+```sh
+optolink2mqtt read-register --serial-port /dev/ttyUSB0 0x0800 2 signed 0.1
+```
+
+The output shows:
+
+- the serial port settings, and whether the VS2 handshake succeeded;
+- the raw bytes, one per line, in hex, decimal and binary;
+- the value decoded with the given parameters;
+- other ways to read the same bytes (signed/unsigned, little/big endian, scaled by 0.1 and 0.01, ASCII), which help you guess the format;
+- a `registers_poll_list` snippet you can paste into the configuration file.
+
+Only one program at a time can talk over the Optolink interface. `read-register` refuses to start, with exit code 5, if the serial port is already in use, for example by an `optolink2mqtt run` instance. Stop that instance first (e.g. `docker stop optolink2mqtt`) and restart it when you are done.
+
+With Docker, run the mode in a temporary container:
+
+```sh
+docker run --rm --device=/dev/ttyUSB0 \
+    ghcr.io/f18m/optolink2mqtt:latest \
+    python -m src.main read-register --serial-port /dev/ttyUSB0 0x0800 2 signed 0.1
+```
+
+`read-register` exits with code 0 if the read succeeded. It exits with 2 if the configuration file cannot be loaded, 4 if the register arguments are invalid, 5 if the serial port is busy, 6 if the Optolink connection cannot be set up, and 7 if the read failed.
+
 
 ## 🔌 Serial port naming
 
