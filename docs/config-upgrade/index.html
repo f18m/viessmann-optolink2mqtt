@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>optolink2mqtt config upgrade</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0; --pane: #f6f8fa;
+    --add-bg: #dafbe1; --add-fg: #116329; --del-bg: #ffebe9; --del-fg: #82071e;
+    --warn: #9a6700; --err: #d1242f; --accent: #0969da;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #3d444d; --pane: #151b23;
+      --add-bg: #12261e; --add-fg: #7ee2a8; --del-bg: #2d1214; --del-fg: #ffa198;
+      --warn: #d29922; --err: #f85149; --accent: #4493f8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  p { margin: 4px 0 12px; color: var(--muted); max-width: 80ch; }
+  a { color: var(--accent); }
+  .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 800px) { .panes { grid-template-columns: 1fr; } }
+  .pane { display: flex; flex-direction: column; min-width: 0; }
+  .pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+               margin-bottom: 6px; font-weight: 600; min-height: 32px; }
+  textarea, .out { height: 70vh; width: 100%; margin: 0; padding: 8px; overflow: auto;
+                   border: 1px solid var(--border); border-radius: 6px; background: var(--pane);
+                   color: var(--fg); font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  textarea { resize: vertical; white-space: pre; }
+  .out div { white-space: pre; min-height: 1.45em; padding-left: 1.5em; text-indent: -1.5em; }
+  .out .add { background: var(--add-bg); color: var(--add-fg); }
+  .out .del { background: var(--del-bg); color: var(--del-fg); text-decoration: line-through; }
+  button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+           border: 1px solid var(--border); background: var(--pane); color: var(--fg); }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { margin: 0 0 12px; padding: 0; list-style: none; }
+  #status li { padding: 2px 0; }
+  #status .warning { color: var(--warn); }
+  #status .error { color: var(--err); font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>optolink2mqtt configuration upgrade</h1>
+<p>
+  Paste your <code>optolink2mqtt.yaml</code> on the left: the right pane shows it converted to the
+  latest <code>config_version</code>, with added lines in green and removed ones in red. Comments and
+  formatting are kept. Everything runs in your browser; the configuration is never uploaded.
+  See the <a href="https://github.com/f18m/viessmann-optolink2mqtt/blob/main/optolink2mqtt.yaml">reference configuration</a>
+  for the meaning of each key.
+</p>
+<ul id="status"></ul>
+
+<div class="panes">
+  <div class="pane">
+    <div class="pane-head"><span>Current configuration</span></div>
+    <textarea id="input" spellcheck="false" placeholder="Paste your optolink2mqtt.yaml here"></textarea>
+  </div>
+  <div class="pane">
+    <div class="pane-head">
+      <span id="out-title">Upgraded configuration</span>
+      <span><button id="copy" disabled>Copy</button> <button id="download" disabled>Download</button></span>
+    </div>
+    <div class="out" id="output" aria-live="polite"></div>
+  </div>
+</div>
+
+<script type="module">
+  import * as YAML from "https://cdn.jsdelivr.net/npm/yaml@2.6.1/+esm";
+  import { diffLines } from "https://cdn.jsdelivr.net/npm/diff@7.0.0/+esm";
+  import { upgradeConfig, LATEST_VERSION } from "./migrations.js";
+
+  const $ = (id) => document.getElementById(id);
+  let upgraded = null;
+
+  function line(cls, text) {
+    const div = document.createElement("div");
+    if (cls) div.className = cls;
+    div.textContent = text;
+    return div;
+  }
+
+  function showStatus(items) {
+    $("status").replaceChildren(...items.map(({ level, message }) => {
+      const li = document.createElement("li");
+      li.className = level;
+      li.textContent = (level === "info" ? "" : level.toUpperCase() + ": ") + message;
+      return li;
+    }));
+  }
+
+  function render() {
+    const text = $("input").value;
+    upgraded = null;
+    $("output").replaceChildren();
+    if (text.trim() === "") {
+      showStatus([]);
+    } else {
+      try {
+        const r = upgradeConfig(text, YAML);
+        upgraded = r.text;
+        const lines = [];
+        for (const part of diffLines(text, r.text)) {
+          const cls = part.added ? "add" : part.removed ? "del" : "";
+          const mark = part.added ? "+ " : part.removed ? "- " : "  ";
+          for (const l of part.value.replace(/\n$/, "").split("\n")) lines.push(line(cls, mark + l));
+        }
+        $("output").replaceChildren(...lines);
+        const summary = r.fromVersion === r.toVersion
+          ? `Already at config_version ${LATEST_VERSION}: nothing to change.`
+          : `Converted from config_version ${r.fromVersion} to ${r.toVersion}.`;
+        const notes = [{ level: "info", message: summary }, ...r.notes];
+        if (r.notes.some((n) => n.level === "error")) {
+          notes.push({ level: "error", message: "Fix the errors above by hand before using the upgraded configuration." });
+        }
+        showStatus(notes);
+      } catch (e) {
+        showStatus([{ level: "error", message: e.message }]);
+      }
+    }
+    $("copy").disabled = $("download").disabled = upgraded === null;
+  }
+
+  let timer;
+  $("input").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(render, 250); });
+
+  $("copy").addEventListener("click", async () => {
+    await navigator.clipboard.writeText(upgraded);
+    $("copy").textContent = "Copied";
+    setTimeout(() => ($("copy").textContent = "Copy"), 1500);
+  });
+
+  $("download").addEventListener("click", () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([upgraded], { type: "text/yaml" }));
+    a.download = "optolink2mqtt.yaml";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+</script>
+</body>
+</html>

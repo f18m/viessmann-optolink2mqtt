@@ -3,6 +3,12 @@
 # All values shown here are the default values
 #
 
+# config_version: version of the format of this file. Each optolink2mqtt release accepts only
+# one version, and refuses to start with any other. Files without it are version 1.
+# To convert a file written for an older version, use the upgrade tool at
+# https://f18m.github.io/viessmann-optolink2mqtt/config-upgrade/
+config_version: 1
+
 logging:
   # logging.level: defines the logging level; it can be one of the following:
   #  - DEBUG

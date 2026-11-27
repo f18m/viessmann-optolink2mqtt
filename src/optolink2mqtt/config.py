@@ -43,6 +43,14 @@ class Config:
     CONFIG_FILE_NAME = "optolink2mqtt.yaml"
     CONFIG_SCHEMA_FILE_NAME = "optolink2mqtt.schema.yaml"
 
+    # Version of the configuration file format accepted by this release, set in the top-level
+    # "config_version" key. Bump it on every change that makes existing configuration files
+    # invalid, and add the matching conversion to the upgrade tool in docs/config-upgrade/.
+    CONFIG_VERSION = 1
+    CONFIG_UPGRADE_URL = (
+        "https://f18m.github.io/viessmann-optolink2mqtt/config-upgrade/"
+    )
+
     def __init__(self):
         self.config = None
 
@@ -121,6 +129,10 @@ class Config:
                 f"Error parsing YAML file '{filename}': expected a single document, got {len(tuple_list)}"
             )
 
+        # check the version before the schema, which would otherwise report the first
+        # incompatible key instead of the actual problem
+        config_version = Config._get_config_version(filename, tuple_list[0][0])
+
         try:
             schema = yamale.make_schema(schema_filename)
             yamale.validate(schema, tuple_list)
@@ -136,6 +148,7 @@ class Config:
                 f"Error parsing YAML file '{filename}': invalid format from yamala library"
             )
         self.config = the_tuple[0]
+        self.config["config_version"] = config_version
 
         # add default values for optional configuration parameters, if they're missing:
         self._fill_defaults_logging()
@@ -167,6 +180,38 @@ class Config:
         logging.info(
             f"Configuration file '{filename}' successfully loaded and validated against schema. It contains {len(self.config['registers_poll_list'])} registers to sample/poll."
         )
+
+    @staticmethod
+    def _get_config_version(filename: str, data) -> int:
+        """
+        Returns the "config_version" of the parsed configuration file, raising a ValueError
+        unless it is the one supported by this release (Config.CONFIG_VERSION).
+        """
+        if not isinstance(data, dict):
+            # not a mapping: let the schema validation report it
+            return Config.CONFIG_VERSION
+
+        # configuration files written before "config_version" existed are version 1
+        version = data.get("config_version", 1)
+        supported = Config.CONFIG_VERSION
+        if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+            raise ValueError(
+                f"Configuration file '{filename}' has an invalid 'config_version' ({version!r}): "
+                f"expected an integer; this release of optolink2mqtt supports config_version {supported}"
+            )
+        if version < supported:
+            raise ValueError(
+                f"Configuration file '{filename}' has config_version {version}, but this release of "
+                f"optolink2mqtt supports only config_version {supported}. Convert the file with the "
+                f"upgrade tool at {Config.CONFIG_UPGRADE_URL}"
+            )
+        if version > supported:
+            raise ValueError(
+                f"Configuration file '{filename}' has config_version {version}, which is newer than "
+                f"config_version {supported} supported by this release of optolink2mqtt. Upgrade "
+                f"optolink2mqtt, or use a configuration file written for config_version {supported}"
+            )
+        return version
 
     def _fill_defaults_optolink(self):
         m = self.config["optolink"]
