@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 
-import sys
-import time
-import serial
+"""
+Hardware-in-the-loop test: talks to a real Viessmann device through an Optolink
+adapter. It is skipped unless the serial port is given explicitly, e.g.:
+
+    OPTOLINK2MQTT_TEST_SERIAL_PORT=/dev/ttyUSB0 pytest tests/test_optolinkvs2_protocol.py
+
+The tests in test_optolinkvs2_protocol_*.py cover the protocol with a mocked port.
+"""
+
 import os
-import logging
+import sys
+
+import pytest
+import serial
 
 # load most updated code living in the parent dir ../src/optolink2mqtt
 THIS_SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -12,57 +21,34 @@ SRC_DIR = os.path.realpath(THIS_SCRIPT_DIR + "/../src")
 sys.path.append(SRC_DIR)
 from optolink2mqtt.optolinkvs2_protocol import OptolinkVS2Protocol  # noqa: E402
 
-# --------------------
-# main for test only
-# --------------------
+PORT = os.environ.get("OPTOLINK2MQTT_TEST_SERIAL_PORT")
 
-PORT = "/dev/ttyUSB0"
-logging.basicConfig(level=logging.DEBUG, force=True)
+# device identification: present on every VS2 device
+DEVICE_IDENT_ADDRESS = 0x00F8
+DEVICE_IDENT_LENGTH = 8
 
 
-class OptolinkVS2ProtocolTest:
+@pytest.mark.skipif(
+    not PORT, reason="set OPTOLINK2MQTT_TEST_SERIAL_PORT to run against a real device"
+)
+def test_datapoint_read():
+    assert os.path.exists(PORT), f"serial port {PORT} does not exist"
 
-    def is_serial_port_avail():
-        if os.path.isfile(PORT):
-            return True
-        else:
-            return False
+    ser = serial.Serial(
+        PORT, baudrate=4800, bytesize=8, parity="E", stopbits=2, timeout=0
+    )
+    proto = OptolinkVS2Protocol(ser, show_opto_rx=True)
+    try:
+        assert proto.init_vs2(), f"VS2 protocol initialization failed on {PORT}"
 
-    def test_datapoint_read(self):
-        if not OptolinkVS2ProtocolTest.is_serial_port_avail():
-            # only execute this test if the serial port is available
-            return
-
-        ser = serial.Serial(
-            PORT, baudrate=4800, bytesize=8, parity="E", stopbits=2, timeout=0
-        )
-        proto = OptolinkVS2Protocol(ser, show_opto_rx=True)
-        try:
-            if not ser.is_open:
-                ser.open()
-            if not proto.init_vs2():
-                raise Exception("init_vs2 failed")
-
-            logging.info(f"VS2 protocol successfully initialized on port {PORT}")
-
-            # read test
-            i = 0
-            while i < 4:
-                logging.info("Reading test datapoint 0x00F8...")
-                rxdata = proto.read_datapoint_ext(0x00F8, 8)
-                if rxdata.is_successful():
-                    logging.info(f"Datapoint content is: {rxdata.data.hex()}")
-                else:
-                    logging.error(
-                        f"Error reading datapoint: code {rxdata.retcode:#02x}"
-                    )
-                time.sleep(0.5)
-                i += 1
-        except Exception as e:
-            logging.error(e)
-        finally:
-            if ser.is_open:
-                logging.info("exit close")
-                # re-init KW protocol
-                ser.write(bytes([0x04]))
-                ser.close()
+        for _ in range(4):
+            rxdata = proto.read_datapoint_ext(DEVICE_IDENT_ADDRESS, DEVICE_IDENT_LENGTH)
+            assert rxdata.is_successful(), (
+                f"reading datapoint 0x{DEVICE_IDENT_ADDRESS:04X} failed with "
+                f"{rxdata.receive_code!r}"
+            )
+            assert len(rxdata.data) == DEVICE_IDENT_LENGTH
+    finally:
+        # re-init KW protocol, so other tools can talk to the device afterwards
+        ser.write(bytes([0x04]))
+        ser.close()
