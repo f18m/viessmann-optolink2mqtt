@@ -2,5 +2,16 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "Do not propose Python (Docker base image, setup-python version) or platformdirs upgrades: the project keeps supporting old distros such as Debian 11 (Python 3.9), and recent platformdirs releases require Python >= 3.11",
+      "matchDepNames": [
+        "python",
+        "/(^|/)library/python$/",
+        "platformdirs"
+      ],
+      "enabled": false
+    }
   ]
 }
