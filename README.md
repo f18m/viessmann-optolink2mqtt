@@ -141,6 +141,12 @@ If you prefer Docker Compose, use the provided [docker-compose.yml](./docker-com
 
 This software accepts declarative configuration in YAML format. Use [optolink2mqtt.yaml](./optolink2mqtt.yaml) as the reference for the supported syntax and configuration structure.
 
+### Configuration version
+
+The top-level `config_version` key says which version of the configuration format a file is written for. Each optolink2mqtt release accepts exactly one version and refuses to start (exit code 2) with any other, explaining why. Files without `config_version` are version 1.
+
+When a release bumps the version, convert your file with the [configuration upgrade tool](https://f18m.github.io/viessmann-optolink2mqtt/config-upgrade/): paste the current file and copy the converted one, with the changes highlighted. It runs entirely in your browser.
+
 ## How to discover register addresses
 
 Please check my translation of the [Viessmann register mappings](https://github.com/f18m/viessmann-parameters-english) to get a good starting point.

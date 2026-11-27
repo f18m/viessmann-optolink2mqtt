@@ -56,6 +56,7 @@ containers.
 | `src/optolink2mqtt/ha_support.py`, `ha_units.py` | Home Assistant platforms, device classes, state classes and units accepted in the config. |
 | `src/optolink2mqtt/_optolink2mqtt_version.py` | **Generated** by hatch-vcs at build time and gitignored. Do not create or edit it. |
 | `tests/` | pytest suite, one `test_<topic>.py` per area. No hardware needed (see [Testing](#testing)). |
+| `docs/config-upgrade/` | Static page (GitHub Pages) converting config files to the latest `config_version`; the conversions are in `migrations.js`. |
 | `optolink2mqtt.yaml` | Reference config: every option, commented, with its default value. Also loaded by tests. |
 | `Makefile` | Development targets (`make help`): setup, format, lint, test, build. Use them, see [Use the Makefile](#use-the-makefile). |
 | `.claude/settings.json` | Commands pre-authorized for agents (`make`, `actionlint`, `black --check`, `docker info`). |
@@ -181,6 +182,10 @@ Exit codes are part of the interface (systemd units, scripts, Docker restart pol
 - **New config option**: add it to the schema (`schema/optolink2mqtt.schema.yaml`), give it a default
   in the matching `Config._fill_defaults_*()` method, document it in `optolink2mqtt.yaml` (commented,
   showing the default), mention it in the README if users need to know, and add a test.
+- **Breaking config change**: bump `Config.CONFIG_VERSION` in `config.py` and `config_version` in
+  `optolink2mqtt.yaml`, then add the conversion from the previous version to `MIGRATIONS` in
+  `docs/config-upgrade/migrations.js` and bump its `LATEST_VERSION`. Each release accepts only its own
+  version; files without `config_version` are version 1.
 - **New Home Assistant discovery field**: add it to `register_ha_discovery` in the schema **and** to
   `optional_parameters` in `OptolinkVS2Register.get_ha_discovery_payload()`; new accepted values go in
   `ha_support.py` / `ha_units.py`.
