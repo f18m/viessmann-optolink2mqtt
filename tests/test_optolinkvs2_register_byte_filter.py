@@ -21,6 +21,8 @@ def make_register(byte_filter, length=3):
             "writable": False,
             "scale_factor": 1.0,
             "byte_filter": byte_filter,
+            "encoding": "little_endian",
+            "formatter": None,
             "enum": None,
             "type": "int",
             "ha_discovery": None,

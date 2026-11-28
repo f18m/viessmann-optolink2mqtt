@@ -41,11 +41,11 @@ def test_consecutive_failures_raise_without_reinitializing_protocol():
     interface.protocol.read_datapoint_ext.return_value = failed_read()
     register = Mock(name="test_register", address=0x2000, length=1)
 
-    assert interface.sample_register(register) is None
-    assert interface.sample_register(register) is None
+    assert interface.sample_register_rawdata(register) is None
+    assert interface.sample_register_rawdata(register) is None
 
     try:
-        interface.sample_register(register)
+        interface.sample_register_rawdata(register)
     except OptolinkReinitializationRequired:
         pass
     else:
@@ -59,13 +59,12 @@ def test_successful_read_resets_consecutive_failure_count():
     interface = create_interface()
     register = Mock(address=0x2000, length=1)
     interface.protocol.read_datapoint_ext.return_value = failed_read()
-    interface.sample_register(register)
+    interface.sample_register_rawdata(register)
     interface.protocol.read_datapoint_ext.return_value = OptolinkVS2RxData(
-        ErrorCode.Success, 0x2000, bytearray()
+        ErrorCode.Success, 0x2000, bytearray([1])
     )
-    register.get_value_from_rawdata.return_value = 1
 
-    assert interface.sample_register(register) == 1
+    assert interface.sample_register_rawdata(register) == bytearray([1])
     assert interface.consecutive_failures == 0
 
 

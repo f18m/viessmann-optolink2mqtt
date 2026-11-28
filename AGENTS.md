@@ -84,9 +84,11 @@ MQTT broker ───────────────────> MqttClien
 - **MQTT callbacks never block and never raise.** They hand incoming messages to the main thread via a
   bounded `queue.Queue` with `put_nowait` (messages are dropped and counted when it is full), and set
   flags guarded by locks. An exception there would kill the paho thread.
-- **Polling** is a `sched.scheduler` on `time.monotonic`. Each register timer re-enqueues itself
-  (`on_schedule_timer`); initial reads are staggered by 100 ms. A write received over MQTT is followed by
-  a read-back of the same register, scheduled at high priority, so other clients see the real value.
+- **Polling** is a `sched.scheduler` on `time.monotonic`. Entries with the same register address and
+  length form a *read group* (`Optolink2MqttApp.read_groups`): the register is read once per poll and
+  decoded for every entry. Each group timer re-enqueues itself (`on_schedule_timer`); initial reads are
+  staggered by 100 ms. A write received over MQTT is followed by a read-back of the register's group,
+  scheduled at high priority, so other clients see the real value.
 - **`_core_loop`** wakes at least every 0.5 s: runs due scheduler events, waits on the queue until the
   next event, processes at most one MQTT message per iteration.
 - **Recovery** happens in `_main_loop`:
@@ -115,7 +117,7 @@ MQTT broker ───────────────────> MqttClien
 
 - The register `type` alone decides how bytes are decoded; `ha_discovery` only shapes what Home Assistant
   sees, never the decoding. Types:
-  - `int` (default): little-endian integer, optionally `signed`;
+  - `int` (default): integer, optionally `signed`, little-endian unless `encoding: big_endian`;
   - `float`: the same integer multiplied by `scale_factor` (allowed only for this type) and rounded to
     2 decimals;
   - `enum`: the integer mapped to a label by the `enum` dictionary (and back, for writes);
@@ -124,6 +126,10 @@ MQTT broker ───────────────────> MqttClien
     `None` for the "not set" value 1970-01-01.
 
   `byte_filter` (`"b:<start>:<end>"`, both inclusive) decodes a slice of an `int` or `float` register.
+  `formatter` is a Jinja2 template, rendered in a `SandboxedEnvironment` with the decoded value as `x`,
+  whose output is published instead of the value; it is compiled at startup and refused on writable
+  registers. `same_read_as: <name>` copies `register` and `length` from another entry (resolved in
+  `Config._resolve_same_read_as()`); entries of a read group must share `sampling_period_seconds`.
 - Topics: state `<publish_topic_prefix>/<sanitized name>`, command `<publish_topic_prefix>/<sanitized name>/set`
   (subscribed only for `writable` registers). Names are sanitized to `[a-z0-9_]`; two registers
   mapping to the same topic are rejected at startup.
@@ -181,7 +187,7 @@ Exit codes are part of the interface (systemd units, scripts, Docker restart pol
    derivatives. Use `from __future__ import annotations` in modules with `X | None` annotations; don't
    use `match`, `tomllib` or other 3.10+ features in `src/`. Before bumping a dependency in
    `requirements.txt`, check that its `Requires-Python` still allows 3.9.
-8. **Minimal dependencies.** Four runtime dependencies (pyserial, paho-mqtt, yamale, platformdirs).
+8. **Minimal dependencies.** Five runtime dependencies (pyserial, paho-mqtt, yamale, platformdirs, Jinja2).
    Prefer the standard library; adding a dependency needs a strong reason.
 9. **Monotonic time** for every delay and timeout (`time.monotonic()`): the wall clock jumps on
    single-board computers without an RTC.

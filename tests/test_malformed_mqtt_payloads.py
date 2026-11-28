@@ -34,6 +34,8 @@ def make_register(length=1, signed=False, scale_factor=1.0, enum=None):
             "writable": True,
             "scale_factor": scale_factor,
             "byte_filter": None,
+            "encoding": "little_endian",
+            "formatter": None,
             "enum": enum,
             "type": (
                 "enum"
@@ -128,6 +130,7 @@ def make_app():
     reg = make_register()
     app = Optolink2MqttApp()
     app.register_list_by_cmd_topic = {reg.get_mqtt_command_topic(): reg}
+    app.read_groups = {(reg.address, reg.length): [reg]}
     app.optolink_interface = Mock()
     app.scheduler = Mock()
     app.enhanced_mqtt_client = Mock()

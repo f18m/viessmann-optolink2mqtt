@@ -148,6 +148,8 @@ def build_register(args: argparse.Namespace) -> OptolinkVS2Register:
             "type": "float" if args.scale_factor != 1.0 else "int",
             "scale_factor": args.scale_factor,
             "byte_filter": args.byte_filter,
+            "encoding": "little_endian",
+            "formatter": None,
             "enum": None,
             "ha_discovery": None,
         },

@@ -22,6 +22,8 @@ def make_register_def(writable: bool, platform: str) -> dict:
         "writable": writable,
         "scale_factor": 1.0,
         "byte_filter": None,
+        "encoding": "little_endian",
+        "formatter": None,
         "enum": None,
         "type": "int",
         "ha_discovery": {"name": "Test", "platform": platform},

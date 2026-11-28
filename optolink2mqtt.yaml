@@ -240,6 +240,62 @@ registers_poll_list:
       unit_of_measurement: "°C"
 
 
+  # another example, showing how to split a register into several values, read only once,
+  # with the "same_read_as", "encoding" and "formatter" features.
+  # The 8-byte device identification block at 0x00F8 contains, in address order, the
+  # device code (2 bytes), the hardware index, the software index, the LDA and RDA
+  # protocol identifiers (1 byte each) and the developer version code (2 bytes);
+  # e.g. "20 CB 04 60 00 00 01 0A" is published as device code "20CB", hardware
+  # index "0x04" and developer version code "0x010A".
+  #  * "same_read_as" copies "register" and "length" from the entry with the given name.
+  #    All the entries with the same register address and length are read from the device
+  #    only once per poll, and decoded for each of them, so they must have the same
+  #    "sampling_period_seconds".
+  #  * "encoding" is the byte order of "int", "float" and "enum" registers (and of the bytes
+  #    selected by "byte_filter"): "little_endian" (the default, used by most Viessmann
+  #    registers) or "big_endian" (keep the address order, as for identification codes).
+  #  * "formatter" is a Jinja2 template (https://jinja.palletsprojects.com/en/stable/templates/)
+  #    applied to the decoded value, available as "x"; the rendered string is published
+  #    on MQTT. E.g. "{{ '%04X' | format(x) }}" publishes the value in hexadecimal with 4
+  #    digits. A formatter is allowed only on read-only registers. Default: no formatter.
+
+  - name: device_code
+    sampling_period_seconds: 3600
+    register: 0x00F8
+    length: 8
+    byte_filter: "b:0:1"
+    encoding: big_endian
+    formatter: "{{ '%04X' | format(x) }}"
+    ha_discovery:
+      name: "Device Code"
+      platform: sensor
+      entity_category: diagnostic
+      icon: mdi:identifier
+
+  - name: device_hardware_index
+    sampling_period_seconds: 3600
+    same_read_as: device_code
+    byte_filter: "b:2:2"
+    formatter: "0x{{ '%02X' | format(x) }}"
+    ha_discovery:
+      name: "Hardware Index"
+      platform: sensor
+      entity_category: diagnostic
+      icon: mdi:identifier
+
+  - name: device_developer_version_code
+    sampling_period_seconds: 3600
+    same_read_as: device_code
+    byte_filter: "b:6:7"
+    encoding: big_endian
+    formatter: "0x{{ '%04X' | format(x) }}"
+    ha_discovery:
+      name: "Developer Version Code"
+      platform: sensor
+      entity_category: diagnostic
+      icon: mdi:identifier
+
+
   # another register example, showing a writable date/time (type "datetime_bcd"):
   # optolink2mqtt publishes it as an ISO 8601 date/time with the UTC offset of "optolink.timezone",
   # e.g. "2026-12-24T00:00:00+01:00", or "None" if the date/time is not set on the device.

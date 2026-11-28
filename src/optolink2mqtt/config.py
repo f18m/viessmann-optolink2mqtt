@@ -163,12 +163,24 @@ class Config:
         for reg in self.config["registers_poll_list"]:
             validated_registers.append(self._fill_defaults_register(reg))
         self.config["registers_poll_list"] = validated_registers
+        Config._resolve_same_read_as(filename, validated_registers)
 
-        # additional coherency check:
+        Config._check_shared_reads(filename, validated_registers)
+
+        logging.info(
+            f"Configuration file '{filename}' successfully loaded and validated against schema. It contains {len(self.config['registers_poll_list'])} registers to sample/poll."
+        )
+
+    @staticmethod
+    def _check_shared_reads(filename: str, registers: list) -> None:
+        """
+        Checks the entries reading the same register address.
+        Raises ValueError if they are not coherent.
+        """
         # the same register address can be present more than once only to extract
         # different bytes of it, i.e. if all its entries have a byte_filter
         regs_by_address = {}
-        for r in self.config["registers_poll_list"]:
+        for r in registers:
             regs_by_address.setdefault(r["register"], []).append(r)
         for addr, regs in regs_by_address.items():
             if len(regs) > 1 and any(r["byte_filter"] is None for r in regs):
@@ -178,9 +190,69 @@ class Config:
                     "this is allowed only if every entry for that address has a 'byte_filter'"
                 )
 
-        logging.info(
-            f"Configuration file '{filename}' successfully loaded and validated against schema. It contains {len(self.config['registers_poll_list'])} registers to sample/poll."
-        )
+        # entries with the same address and length are read once and decoded for each
+        # of them (see Optolink2MqttApp), so they must share the sampling period
+        regs_by_read = {}
+        for r in registers:
+            regs_by_read.setdefault((r["register"], r["length"]), []).append(r)
+        for (addr, length), regs in regs_by_read.items():
+            periods = {r["sampling_period_seconds"] for r in regs}
+            if len(periods) > 1:
+                raise ValueError(
+                    f"Configuration file '{filename}' is invalid: the entries reading register 0x{addr:04X} "
+                    f"with length {length} ({', '.join(r['name'] for r in regs)}) share a single read, "
+                    f"so they must have the same 'sampling_period_seconds' (found {sorted(periods)})"
+                )
+
+    @staticmethod
+    def _resolve_same_read_as(filename: str, registers: list) -> None:
+        """
+        Fills the "register" and "length" of every entry using "same_read_as" with those of
+        the entry it names, and checks that every other entry has both of them.
+        Raises ValueError if the configuration is not coherent.
+        """
+        by_name = {}
+        for r in registers:
+            by_name.setdefault(r["name"], []).append(r)
+
+        for r in registers:
+            target_name = r["same_read_as"]
+            if target_name is None:
+                missing = [k for k in ("register", "length") if k not in r]
+                if missing:
+                    raise ValueError(
+                        f"Configuration file '{filename}' is invalid: register '{r['name']}' has no "
+                        f"{' and no '.join(repr(k) for k in missing)}; set both 'register' and 'length', "
+                        "or 'same_read_as'"
+                    )
+                continue
+
+            prefix = (
+                f"Configuration file '{filename}' is invalid: register '{r['name']}' has "
+                f"'same_read_as: {target_name}'"
+            )
+            if "register" in r or "length" in r:
+                raise ValueError(
+                    f"{prefix} and also 'register' or 'length'; remove them, they are copied "
+                    f"from '{target_name}'"
+                )
+            targets = by_name.get(target_name, [])
+            if len(targets) != 1:
+                raise ValueError(
+                    f"{prefix}, but "
+                    + (
+                        "no entry has that name"
+                        if not targets
+                        else f"{len(targets)} entries have that name"
+                    )
+                )
+            target = targets[0]
+            if target is r or target["same_read_as"] is not None:
+                raise ValueError(
+                    f"{prefix}, but it must name an entry that defines 'register' and 'length' itself"
+                )
+            r["register"] = target["register"]
+            r["length"] = target["length"]
 
     @staticmethod
     def _get_config_version(filename: str, data) -> int:
@@ -342,12 +414,23 @@ class Config:
                 "set 'mqtt.broker.tls: true' if the broker supports it"
             )
 
+    # default values of the optional register keys that need no further validation;
+    # "register" and "length" have no default, see _resolve_same_read_as()
+    REGISTER_DEFAULTS = {
+        "signed": False,
+        "writable": False,
+        "byte_filter": None,
+        "enum": None,
+        "type": "int",
+        "encoding": "little_endian",
+        "formatter": None,
+        "same_read_as": None,
+    }
+
     def _fill_defaults_register(self, reg: dict) -> dict:
         # NOTE: "sampling_period_seconds" is mandatory in the schema, so it has no default
-        if "signed" not in reg:
-            reg["signed"] = False
-        if "writable" not in reg:
-            reg["writable"] = False
+        for key, default in Config.REGISTER_DEFAULTS.items():
+            reg.setdefault(key, default)
         if "scale_factor" not in reg:
             reg["scale_factor"] = 1.0
         else:
@@ -356,13 +439,6 @@ class Config:
                 raise ValueError(
                     f"{reg['name']}: Invalid 'scale_factor' attribute in configuration file: shall be greater than zero"
                 )
-
-        if "byte_filter" not in reg:
-            reg["byte_filter"] = None
-        if "enum" not in reg:
-            reg["enum"] = None
-        if "type" not in reg:
-            reg["type"] = "int"
 
         if "ha_discovery" not in reg:
             # HA discovery disabled for this task:
@@ -410,10 +486,12 @@ class Config:
                 # We just make sure to never add "state_class" to some types of "device_class"es that will
                 # trigger errors on the HomeAssistant side, and to platforms other than "sensor",
                 # since "state_class" is a sensor-only attribute in HomeAssistant.
-                # Only numeric registers can be measurements.
+                # Only numeric registers can be measurements, and a formatter may turn the
+                # value into a non-numeric string (e.g. hexadecimal).
                 if (
                     h["platform"] == "sensor"
                     and reg["type"] in ("int", "float")
+                    and reg["formatter"] is None
                     and h["device_class"]
                     not in HA_UNSUPPORTED_DEVICE_CLASSES_FOR_MEASUREMENTS
                 ):

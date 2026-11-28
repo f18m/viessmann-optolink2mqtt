@@ -28,6 +28,9 @@ import json
 import logging
 import re
 
+from jinja2 import StrictUndefined, TemplateError, meta
+from jinja2.sandbox import SandboxedEnvironment
+
 from . import datetime_bcd
 
 
@@ -45,15 +48,28 @@ class OptolinkVS2Register:
     MAX_DECIMALS = 2
 
     # supported values for the "type" register attribute:
-    #  - int:          little-endian integer
-    #  - float:        little-endian integer multiplied by the scale factor
-    #  - enum:         little-endian integer mapped to a label by the "enum" dictionary
+    #  - int:          integer, little-endian unless "encoding" says otherwise
+    #  - float:        integer multiplied by the scale factor
+    #  - enum:         integer mapped to a label by the "enum" dictionary
     #  - datetime_bcd: 8-byte Viessmann DateTimeBCD, published as ISO 8601
     TYPE_INT = "int"
     TYPE_FLOAT = "float"
     TYPE_ENUM = "enum"
     TYPE_DATETIME_BCD = "datetime_bcd"
     SUPPORTED_TYPES = (TYPE_INT, TYPE_FLOAT, TYPE_ENUM, TYPE_DATETIME_BCD)
+
+    # supported values for the "encoding" register attribute, i.e. the byte order of
+    # int/float/enum registers, mapped to the int.from_bytes()/int.to_bytes() byteorder
+    ENCODING_LITTLE_ENDIAN = "little_endian"
+    ENCODING_BIG_ENDIAN = "big_endian"
+    SUPPORTED_ENCODINGS = {ENCODING_LITTLE_ENDIAN: "little", ENCODING_BIG_ENDIAN: "big"}
+
+    # name of the variable holding the decoded value inside a "formatter" template
+    FORMATTER_VARIABLE = "x"
+
+    # formatters are user-provided Jinja2 templates: render them in a sandbox, and fail
+    # on any undefined name instead of silently rendering it as an empty string
+    _FORMATTER_ENV = SandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
 
     # characters removed from register names by _sanitize_name()
     _DROPPED_CHARS = re.compile(r"[()\[\]{}\"']")
@@ -89,8 +105,14 @@ class OptolinkVS2Register:
         self._byte_filter_slice = self._parse_byte_filter(self.byte_filter)
         self.enum_dict = reg["enum"]
         self.type = reg["type"]
+        self.encoding = reg["encoding"]
         self.device_timezone = device_timezone
         self.check_type_validity()
+        self._byteorder = OptolinkVS2Register.SUPPORTED_ENCODINGS[self.encoding]
+
+        # optional Jinja2 template applied to the decoded value before publishing it
+        self.formatter = reg["formatter"]
+        self._formatter_template = self._compile_formatter(self.formatter)
 
         # the type cannot change, so the decoder and encoder are chosen once here
         cls = OptolinkVS2Register
@@ -169,6 +191,11 @@ class OptolinkVS2Register:
                 f"Register '{self.name}' has invalid type '{self.type}'; expected one of {list(cls.SUPPORTED_TYPES)}"
             )
 
+        if self.encoding not in cls.SUPPORTED_ENCODINGS:
+            raise ValueError(
+                f"Register '{self.name}' has invalid encoding '{self.encoding}'; expected one of {list(cls.SUPPORTED_ENCODINGS)}"
+            )
+
         if self.enum_dict is not None and self.type != cls.TYPE_ENUM:
             raise ValueError(
                 f"Register '{self.name}' has an 'enum' dictionary but type '{self.type}'; "
@@ -191,17 +218,73 @@ class OptolinkVS2Register:
                     f"Register '{self.name}' has type '{cls.TYPE_DATETIME_BCD}' but length {self.length}; "
                     f"expected {datetime_bcd.DATETIME_BCD_LENGTH}"
                 )
-            if self.signed or self.byte_filter is not None:
+            if (
+                self.signed
+                or self.byte_filter is not None
+                or self.encoding != cls.ENCODING_LITTLE_ENDIAN
+            ):
                 raise ValueError(
                     f"Register '{self.name}' has type '{cls.TYPE_DATETIME_BCD}', "
-                    "which cannot be combined with 'signed' or 'byte_filter'"
+                    "which cannot be combined with 'signed', 'byte_filter' or 'encoding'"
                 )
+
+    def _compile_formatter(self, formatter: str | None):
+        """
+        Compiles the "formatter" Jinja2 template, or returns None if no formatter is configured.
+        Raises ValueError if the template is invalid, uses a variable other than the decoded
+        value, or is configured on a writable register.
+        """
+        if formatter is None:
+            return None
+
+        var = OptolinkVS2Register.FORMATTER_VARIABLE
+        if self.writable:
+            # values written over MQTT are parsed as plain (unformatted) values, so a
+            # formatted state would not round-trip
+            raise ValueError(
+                f"Register '{self.name}' has a 'formatter' but is writable; "
+                "a formatter is allowed only on read-only registers"
+            )
+        env = OptolinkVS2Register._FORMATTER_ENV
+        try:
+            unknown = meta.find_undeclared_variables(env.parse(formatter)) - {var}
+            template = env.from_string(formatter)
+        except TemplateError as e:
+            raise ValueError(
+                f"Register '{self.name}' has invalid formatter '{formatter}': {e}"
+            )
+        if unknown:
+            raise ValueError(
+                f"Register '{self.name}' has invalid formatter '{formatter}': it uses the "
+                f"undefined variable(s) {sorted(unknown)}; only '{var}' (the decoded value) is available"
+            )
+        return template
+
+    def _apply_formatter(
+        self, value: str | int | float | None
+    ) -> str | int | float | None:
+        """
+        Renders the formatter template with the given decoded value, if a formatter is configured.
+        Returns None (nothing to publish) if the value is None or the template fails to render.
+        """
+        if self._formatter_template is None or value is None:
+            return value
+        try:
+            return self._formatter_template.render(
+                {OptolinkVS2Register.FORMATTER_VARIABLE: value}
+            )
+        except Exception as e:
+            # the template is user-provided: any error it raises must not stop the app
+            logging.error(
+                f"Register '{self.name}' formatter '{self.formatter}' failed on value {value!r}: {e}"
+            )
+            return None
 
     def get_human_readable_description(self) -> str:
         """
         Returns a human-readable description for this register
         """
-        return f"name=[{self.name}], addr=0x{self.address:04X}, len={self.length}, type={self.type}, signed={self.signed}, scale={self.scale_factor}, byte_filter={self.byte_filter}, enum={self.enum_dict}, has HA discovery={self.ha_discovery is not None}"
+        return f"name=[{self.name}], addr=0x{self.address:04X}, len={self.length}, type={self.type}, encoding={self.encoding}, signed={self.signed}, scale={self.scale_factor}, byte_filter={self.byte_filter}, enum={self.enum_dict}, formatter={self.formatter}, has HA discovery={self.ha_discovery is not None}"
 
     def get_next_occurrence_in_seconds(self) -> float:
         """
@@ -216,9 +299,11 @@ class OptolinkVS2Register:
 
         This function will return a string for "enum" and "datetime_bcd" registers,
         an integer for "int" registers and a float for "float" registers.
+        If a "formatter" is configured, the decoded value is passed through it and
+        the rendered string is returned instead.
         In case of invalid conversion, None is returned.
         """
-        return self._value_from_rawdata(rawdata)
+        return self._apply_formatter(self._value_from_rawdata(rawdata))
 
     def get_rawdata_from_value(self, str_value: str) -> bytearray | None:
         """
@@ -234,12 +319,13 @@ class OptolinkVS2Register:
 
     def _get_int_from_rawdata(self, rawdata: bytearray) -> int:
         """
-        Decodes the register (or the bytes selected by its byte filter) as a little-endian integer.
+        Decodes the register (or the bytes selected by its byte filter) as an integer,
+        in the byte order given by its encoding.
         """
         if self._byte_filter_slice is not None:
             rawdata = rawdata[self._byte_filter_slice]
 
-        val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
+        val = int.from_bytes(rawdata, byteorder=self._byteorder, signed=self.signed)
 
         if not self.signed:
             maxpossible_value = int.from_bytes(
@@ -264,7 +350,7 @@ class OptolinkVS2Register:
         """
         Decodes the register as an integer and maps it to its label in the enum dictionary.
         """
-        val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
+        val = int.from_bytes(rawdata, byteorder=self._byteorder, signed=self.signed)
         return self.enum_dict.get(val, f"Unknown ({val})")
 
     def _get_datetime_bcd_from_rawdata(self, rawdata: bytearray) -> str | None:
@@ -365,12 +451,12 @@ class OptolinkVS2Register:
 
     def _int_to_rawdata(self, val: int, str_value: str) -> bytearray | None:
         """
-        Returns the little-endian bytes of the given integer, or None if it does not fit
-        the register length and signedness.
+        Returns the bytes of the given integer, in the byte order given by the register
+        encoding, or None if it does not fit the register length and signedness.
         """
         try:
             return bytearray(
-                val.to_bytes(self.length, byteorder="little", signed=self.signed)
+                val.to_bytes(self.length, byteorder=self._byteorder, signed=self.signed)
             )
         except OverflowError:
             logging.error(
@@ -396,7 +482,7 @@ class OptolinkVS2Register:
 
         # compare the value that will actually be written, after rounding to the
         # register resolution
-        val = int.from_bytes(rawdata, byteorder="little", signed=self.signed)
+        val = int.from_bytes(rawdata, byteorder=self._byteorder, signed=self.signed)
         val = round(val * self.scale_factor, OptolinkVS2Register.MAX_DECIMALS)
 
         min_val = self.ha_discovery.get("min")

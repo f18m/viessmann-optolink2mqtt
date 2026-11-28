@@ -203,16 +203,17 @@ class OptolinkInterface:
             )
         return rx_data
 
-    def sample_register(self, reg: OptolinkVS2Register):
+    def sample_register_rawdata(self, reg: OptolinkVS2Register) -> Optional[bytearray]:
         """
-        Reads a register from the device and returns its value, or None on failure.
+        Reads a register from the device and returns its raw data, or None on failure.
+        The result is counted towards the consecutive failures.
         """
 
         rx_data = self.read_register_rawdata(reg)
         self._track_result(rx_data)
         if not rx_data.is_successful():
             return None
-        return reg.get_value_from_rawdata(rx_data.data)
+        return rx_data.data
 
     def write_register(self, reg: OptolinkVS2Register, raw_data: bytes) -> bool:
         """

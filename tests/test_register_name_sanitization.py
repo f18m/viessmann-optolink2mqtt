@@ -22,6 +22,8 @@ def make_register_def(name: str, address: int = 0x1000) -> dict:
         "writable": False,
         "scale_factor": 1.0,
         "byte_filter": None,
+        "encoding": "little_endian",
+        "formatter": None,
         "enum": None,
         "type": "int",
         "ha_discovery": None,

@@ -35,6 +35,8 @@ def make_register(min_val=20, max_val=60, scale_factor=0.1, signed=False):
             "type": "float" if scale_factor != 1.0 else "int",
             "scale_factor": scale_factor,
             "byte_filter": None,
+            "encoding": "little_endian",
+            "formatter": None,
             "enum": None,
             "ha_discovery": ha_discovery,
         },
@@ -88,6 +90,7 @@ def test_min_zero_is_enforced():
 def make_app(reg):
     app = Optolink2MqttApp()
     app.register_list_by_cmd_topic = {reg.get_mqtt_command_topic(): reg}
+    app.read_groups = {(reg.address, reg.length): [reg]}
     app.optolink_interface = Mock()
     app.scheduler = Mock()
     app.enhanced_mqtt_client = Mock()
