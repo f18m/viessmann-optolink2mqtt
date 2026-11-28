@@ -163,11 +163,16 @@ The top-level `config_version` key says which version of the configuration forma
 
 When a release bumps the version, convert your file with the [configuration upgrade tool](https://f18m.github.io/viessmann-optolink2mqtt/config-upgrade/): paste the current file and copy the converted one, with the changes highlighted. It runs entirely in your browser.
 
-## How to discover register addresses
+## How to discover register addresses/length/encoding
 
-Please check my translation of the [Viessmann register mappings](https://github.com/f18m/viessmann-parameters-english) to get a good starting point.
+This is typically the most difficult/convoluted step.
+I tried to provide a step-by-step procedure in [this wiki page](https://github.com/f18m/viessmann-optolink2mqtt/wiki/How-to-find-the-register-mappings-for-your-device).
+Feedback is welcome.
 
-### Reading a single register with `read-register`
+As you will read on the wiki, exploring the registers of your Viessmann device is much simpler using the `read-register` helper provided by viessmann-optolink2mqtt. So checkout next section.
+
+
+## Reading a single register with `read-register`
 
 `optolink2mqtt` has two modes:
 
