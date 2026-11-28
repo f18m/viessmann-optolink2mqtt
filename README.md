@@ -157,6 +157,36 @@ A `scale_factor` other than 1 requires `type: float`, and an `enum` dictionary r
 A `datetime_bcd` register is published as an ISO 8601 date/time, or as `None` when the date/time is not set on the device (Viessmann stores 1970-01-01 for that). The device clock has no timezone: set `optolink.timezone` to its IANA timezone, e.g. `Europe/Berlin`, otherwise the timezone of the host is used. Writing an ISO 8601 date/time sets the register, converting it to the device timezone if it carries a timezone; writing `None` clears it.
 In Home Assistant, use the `datetime` platform for a writable register (Home Assistant 2026.5 or later), or the `sensor` platform with `device_class: timestamp` for a read-only one.
 
+### Byte order, formatting and split registers
+
+Some registers pack several values, e.g. the 8-byte device identification block at `0x00F8`. Three optional register attributes help to publish each value on its own:
+
+| Attribute | Meaning | Default |
+|---|---|---|
+| `byte_filter` | decode only bytes `b:<start>:<end>` (both inclusive, zero-based) | all bytes |
+| `encoding` | byte order of `int`, `float` and `enum` registers: `little_endian` or `big_endian` (keep the address order) | `little_endian` |
+| `formatter` | [Jinja2 template](https://jinja.palletsprojects.com/en/stable/templates/) rendering the decoded value `x` into the published string, e.g. `"0x{{ '%04X' \| format(x) }}"`. Read-only registers only. | none |
+| `same_read_as` | name of another entry whose `register` and `length` are reused, instead of setting them | none |
+
+All entries with the same register address and length are read from the device only once per poll and decoded for each of them, so they must have the same `sampling_period_seconds`. For example, with the bytes `20 CB 04 60 00 00 01 0A`:
+
+```yaml
+  - name: device_code
+    sampling_period_seconds: 3600
+    register: 0x00F8
+    length: 8
+    byte_filter: "b:0:1"
+    encoding: big_endian
+    formatter: "{{ '%04X' | format(x) }}"   # publishes "20CB"
+  - name: device_hardware_index
+    sampling_period_seconds: 3600
+    same_read_as: device_code
+    byte_filter: "b:2:2"
+    formatter: "0x{{ '%02X' | format(x) }}" # publishes "0x04"
+```
+
+Formatters run in a Jinja2 sandbox and are checked at startup; a formatter failing on a value at runtime logs an error and skips publishing that value. A sensor with a formatter gets no default `state_class`, since its value may not be a number.
+
 ### Configuration version
 
 The top-level `config_version` key says which version of the configuration format a file is written for. Each optolink2mqtt release accepts exactly one version and refuses to start (exit code 2) with any other, explaining why. Files without `config_version` are version 1.

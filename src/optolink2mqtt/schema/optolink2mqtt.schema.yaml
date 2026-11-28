@@ -47,9 +47,13 @@ mqtt_broker:
 register_definition: 
   name: str()
   sampling_period_seconds: int(min=1)
-  register: int()
-  length: int(min=1, max=250) # 250 is the largest data length of a VS2 telegram
+  # either "register" and "length", or "same_read_as" (copying them from another entry) are required
+  register: int(required=False)
+  length: int(min=1, max=250, required=False) # 250 is the largest data length of a VS2 telegram
+  same_read_as: str(required=False) # name of another entry whose register and length are reused
   type: enum('int', 'float', 'enum', 'datetime_bcd', required=False) # defaults to int
+  encoding: enum('little_endian', 'big_endian', required=False) # byte order; defaults to little_endian
+  formatter: str(required=False) # Jinja2 template applied to the decoded value 'x'; defaults to none
   signed: bool(required=False) # defaults to false
   writable: bool(required=False) # defaults to false
   byte_filter: str(required=False) # defaults to no byte filter

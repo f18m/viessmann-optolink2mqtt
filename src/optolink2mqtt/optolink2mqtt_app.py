@@ -26,7 +26,7 @@ import socket
 import termios
 import threading
 import time
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 import paho.mqtt.client as paho  # pip install paho-mqtt
 import serial
@@ -68,6 +68,10 @@ class Optolink2MqttApp:
         # dict of OptolinkVS2Register instances keyed by their COMMAND TOPIC
         self.register_list_by_cmd_topic = {}
 
+        # the registers sharing the same (address, length), which are read from the device
+        # once and decoded for each of them, e.g. different byte_filter slices of a register
+        self.read_groups: Dict[Tuple[int, int], List[OptolinkVS2Register]] = {}
+
     def log_status(self) -> None:
         """
         Logs summary of how well this app is running.
@@ -79,21 +83,28 @@ class Optolink2MqttApp:
             f"{self.optolink_interface.get_human_friendly_stats()}"
         )
 
-    def _sample_register(self, reg: OptolinkVS2Register) -> bool:
+    def _sample_read_group(self, regs: List[OptolinkVS2Register]) -> int:
         """
-        Samples a single register and publishes its value on MQTT.
+        Reads once the register shared by the given entries (same address and length),
+        then decodes and publishes on MQTT the value of each of them.
+        Returns the number of values published.
         """
 
-        value = self.optolink_interface.sample_register(reg)
-        if value is None:
+        rawdata = self.optolink_interface.sample_register_rawdata(regs[0])
+        if rawdata is None:
             self.enhanced_mqtt_client.publish_status_metrics(
                 self.optolink_interface.get_total_errors()
             )
-            return False
+            return 0
 
-        # publish on MQTT the "value" obtained from the raw data
-        self.enhanced_mqtt_client.publish(reg.get_mqtt_state_topic(), value)
-        return True
+        npublished = 0
+        for reg in regs:
+            # publish on MQTT the "value" obtained from the raw data
+            value = reg.get_value_from_rawdata(rawdata)
+            if value is not None:
+                self.enhanced_mqtt_client.publish(reg.get_mqtt_state_topic(), value)
+                npublished += 1
+        return npublished
 
     def _sample_all_registers(self) -> None:
         """
@@ -101,36 +112,39 @@ class Optolink2MqttApp:
         """
 
         nregs = 0
-        for reg in self.register_list_by_cmd_topic.values():
-            if self._sample_register(reg):
-                nregs += 1
+        for regs in self.read_groups.values():
+            nregs += self._sample_read_group(regs)
         logging.info(f"Sampled {nregs} registers successfully and published on MQTT")
 
     @staticmethod
-    def on_schedule_timer(app: "Optolink2MqttApp", reg: OptolinkVS2Register) -> None:
+    def on_schedule_timer(
+        app: "Optolink2MqttApp", regs: List[OptolinkVS2Register]
+    ) -> None:
         """
-        Callback invoked by the scheduler when it's time to read a register.
+        Callback invoked by the scheduler when it's time to read a register, shared by
+        the given entries.
         Please note that this is a static method, so all data must be accessed
         through the 'app' parameter.
 
         IMPORTANT: since this callback is also self-requeuing, the main body should
-        call this only once per register occurrence.
+        call this only once per read group.
         """
 
         logging.debug(
-            f"Optolink2MqttApp.on_schedule_timer(name={reg.name}, addr=0x{reg.address:02x})",
+            f"Optolink2MqttApp.on_schedule_timer(names={[r.name for r in regs]}, addr=0x{regs[0].address:02x})",
         )
 
-        # reschedule next occurrence for this register
+        # reschedule next occurrence for this register; Config ensures that all the
+        # entries of a read group have the same sampling period
         app.scheduler.enter(
-            reg.get_next_occurrence_in_seconds(),
+            regs[0].get_next_occurrence_in_seconds(),
             Optolink2MqttApp.NORMAL_SCHEDULER_PRIORITY,
             Optolink2MqttApp.on_schedule_timer,
-            (app, reg),
+            (app, regs),
         )
 
         # sample the register after scheduling the next occurrence
-        app._sample_register(reg)
+        app._sample_read_group(regs)
         return
 
     @staticmethod
@@ -291,23 +305,30 @@ class Optolink2MqttApp:
             logging.info(
                 f"Definition of register#{i}: {register_instance.get_human_readable_description()}"
             )
-
-            # upon startup optolink2mqtt will immediately run all scheduling rules, just
-            # scattered 100ms one from each other:
-            first_time_delay_sec = 0.1 * (i + 1)
-
-            # include this in our scheduler:
-            self.scheduler.enter(
-                first_time_delay_sec,
-                Optolink2MqttApp.NORMAL_SCHEDULER_PRIORITY,
-                Optolink2MqttApp.on_schedule_timer,
-                (self, register_instance),
-            )
             i += 1
 
             # store the OptolinkVS2Register also locally, in a dict that helps later
             # to process incoming MQTT write requests:
             self.register_list_by_cmd_topic[cmd_topic] = register_instance
+            self.read_groups.setdefault(
+                (register_instance.address, register_instance.length), []
+            ).append(register_instance)
+
+        # schedule one read per group of entries sharing the same address and length:
+        # upon startup optolink2mqtt will immediately run all scheduling rules, just
+        # scattered 100ms one from each other
+        for n, regs in enumerate(self.read_groups.values()):
+            if len(regs) > 1:
+                logging.info(
+                    f"Register 0x{regs[0].address:04X} (length {regs[0].length}) is read once "
+                    f"for {len(regs)} entries: {', '.join(r.name for r in regs)}"
+                )
+            self.scheduler.enter(
+                0.1 * (n + 1),
+                Optolink2MqttApp.NORMAL_SCHEDULER_PRIORITY,
+                Optolink2MqttApp.on_schedule_timer,
+                (self, regs),
+            )
 
         #
         # create enhanced MQTT client
@@ -392,11 +413,12 @@ class Optolink2MqttApp:
         # scheduled read which could be minutes later !!
         # This is useful to do even in case of write failure, because we need to inform ASAP
         # the other MQTT clients that the actual value of the register did not change !
+        # The entries sharing the same read are published too, since their bytes may have changed.
         self.scheduler.enter(
             0.01,  # close-to-zero delay
             Optolink2MqttApp.HIGH_SCHEDULER_PRIORITY,
-            self._sample_register,
-            (reg,),
+            self._sample_read_group,
+            (self.read_groups[(reg.address, reg.length)],),
         )
 
     def _core_loop(self) -> None:

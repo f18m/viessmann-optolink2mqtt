@@ -49,6 +49,8 @@ def make_register(
         "type": type_,
         "scale_factor": 1.0,
         "byte_filter": None,
+        "encoding": "little_endian",
+        "formatter": None,
         "enum": None,
         "ha_discovery": (
             None
